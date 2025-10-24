@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tutoriaz Student Registration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f3f4f6; }
+        .container { max-width: 420px; margin: 60px auto; padding: 32px; background: #ffffff; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { font-size: 24px; margin-bottom: 16px; text-align: center; }
+        label { display: block; margin-top: 16px; font-weight: bold; }
+        input { width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #d1d5db; border-radius: 4px; }
+        button { width: 100%; margin-top: 24px; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .message { margin-top: 16px; padding: 12px; border-radius: 4px; display: none; }
+        .message.success { background: #dcfce7; color: #166534; }
+        .message.error { background: #fee2e2; color: #991b1b; }
+        .note { margin-top: 24px; font-size: 14px; color: #6b7280; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Student Account</h1>
+        <form id="register-form">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" minlength="3" maxlength="30" required>
+
+            <label for="display_name">Display Name</label>
+            <input id="display_name" name="display_name" type="text" maxlength="80" placeholder="Optional">
+
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" minlength="6" required>
+
+            <button type="submit">Register</button>
+        </form>
+        <div id="message" class="message"></div>
+    <p class="note">Already have an account? <a href="/?login=1">Return to login</a>.</p>
+    </div>
+
+    <script>
+        const form = document.getElementById('register-form');
+        const messageEl = document.getElementById('message');
+
+        function showMessage(text, type) {
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            messageEl.style.display = 'none';
+
+            const data = {
+                username: form.username.value.trim(),
+                display_name: form.display_name.value.trim(),
+                password: form.password.value
+            };
+
+            if (!data.username || !data.password) {
+                showMessage('Username and password are required.', 'error');
+                return;
+            }
+
+            form.querySelector('button').disabled = true;
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Registration failed');
+                }
+
+                showMessage('Registration successful! Redirecting to login…', 'success');
+                form.reset();
+                setTimeout(() => {
+                    window.location.href = '/?login=1';
+                }, 1200);
+            } catch (error) {
+                showMessage(error.message, 'error');
+            } finally {
+                form.querySelector('button').disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

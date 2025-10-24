@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Course Platform</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        }
+        .hero {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .hero h1 {
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        .hero p {
+            margin: 0;
+            color: #555;
+            font-size: 16px;
+        }
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 24px;
+            background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .card h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #1f2937;
+        }
+        .card p {
+            margin: 0;
+            color: #4b5563;
+            font-size: 14px;
+        }
+        .card-action {
+            margin-top: auto;
+        }
+        .btn-primary,
+        .btn-secondary {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 15px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background-color: #2563eb;
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            background-color: #1d4ed8;
+        }
+        .btn-secondary {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db;
+        }
+        .btn-secondary:active,
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+        .login-panel {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 30px;
+        }
+        .login-panel h2 {
+            margin: 0 0 16px 0;
+            font-size: 22px;
+            color: #1f2937;
+            text-align: center;
+        }
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 360px;
+            margin: 0 auto;
+        }
+        input {
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+        .error {
+            color: #991b1b;
+            margin-top: 10px;
+            padding: 12px;
+            background-color: #fee2e2;
+            border-radius: 6px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .success {
+            color: #166534;
+            margin-top: 10px;
+            padding: 12px;
+            background-color: #dcfce7;
+            border-radius: 6px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .hidden {
+            display: none;
+        }
+        .demo-accounts {
+            background-color: #eff6ff;
+            padding: 18px;
+            border-radius: 8px;
+            margin-top: 24px;
+            font-size: 14px;
+            color: #1e3a8a;
+        }
+        .demo-accounts h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #1d4ed8;
+            text-align: left;
+        }
+        .redirect-panel {
+            text-align: center;
+            padding: 40px 0 10px 0;
+        }
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 12px;
+            }
+            .container {
+                padding: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>ESP32 Course Platform</h1>
+            <p>Choose to register as a student or log in to access your dashboard.</p>
+        </div>
+
+        <div class="card-grid">
+            <div class="card">
+                <h2>New here?</h2>
+                <p>Create a student account to join your teacher's lobby.</p>
+                <div class="card-action">
+                    <a href="/register.html" class="btn-primary">Register as Student</a>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Already registered?</h2>
+                <p>Log in with your credentials to reach your lobby.</p>
+                <div class="card-action">
+                    <button id="openLogin" class="btn-secondary">Show Login</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="loginSection" class="login-panel hidden">
+            <h2>Student or Teacher Login</h2>
+            <form class="login-form" id="loginForm">
+                <input type="text" id="username" placeholder="Username" autocomplete="username" required>
+                <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+
+            <div class="demo-accounts">
+                <h3>Demo Credentials</h3>
+                <p><strong>Teacher:</strong> username=teacher, password=admin123</p>
+                <p><strong>Students:</strong> username=student1, password=student123</p>
+                <p style="margin-left: 18px;">username=student2, password=student123</p>
+                <p style="margin-left: 18px;">username=student3, password=student123</p>
+            </div>
+
+            <div id="loginMessage"></div>
+        </div>
+
+        <div id="redirectSection" class="redirect-panel hidden">
+            <h2>Redirecting...</h2>
+            <p>Please wait while we redirect you to your dashboard.</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        const openLoginButton = document.getElementById('openLogin');
+        const loginSection = document.getElementById('loginSection');
+
+        function showLoginPanel() {
+            loginSection.classList.remove('hidden');
+            loginSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        openLoginButton.addEventListener('click', () => {
+            showLoginPanel();
+        });
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const messageDiv = document.getElementById('loginMessage');
+            messageDiv.innerHTML = '';
+            showLoginPanel();
+
+            try {
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+
+                    messageDiv.innerHTML = '<div class="success">Login successful! Redirecting...</div>';
+
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('redirectSection').classList.remove('hidden');
+
+                    setTimeout(() => {
+                        if (data.user.role === 'teacher') {
+                            window.location.href = '/teacher.html';
+                        } else {
+                            window.location.href = '/student.html';
+                        }
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = `<div class="error">${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                messageDiv.innerHTML = '<div class="error">Network error. Please try again.</div>';
+            }
+        });
+
+        window.addEventListener('load', () => {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            const params = new URLSearchParams(window.location.search);
+
+            if (params.get('login') === '1') {
+                showLoginPanel();
+            }
+
+            if (token && user) {
+                try {
+                    const userData = JSON.parse(user);
+                    if (userData.role === 'teacher') {
+                        window.location.href = '/teacher.html';
+                    } else {
+                        window.location.href = '/student.html';
+                    }
+                } catch (error) {
+                    console.error('Error parsing user data:', error);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
