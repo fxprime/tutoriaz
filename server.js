@@ -18,7 +18,7 @@ const io = socketIo(server, {
 });
 
 // Configuration
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3030;
 const HOST = process.env.HOST || '0.0.0.0';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const DB_PATH = path.join(__dirname, 'database.sqlite');
