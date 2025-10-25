@@ -2631,18 +2631,59 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
     }
 });
 
+function resolveActivePush(identifier) {
+    if (!identifier) {
+        return null;
+    }
+
+    if (activePushes.has(identifier)) {
+        const pushData = activePushes.get(identifier);
+        return {
+            pushId: identifier,
+            pushData,
+            quizId: pushData ? pushData.quiz_id : null
+        };
+    }
+
+    if (activePushesByQuiz.has(identifier)) {
+        const pushMeta = activePushesByQuiz.get(identifier);
+        if (!pushMeta) {
+            return null;
+        }
+
+        const normalizedPushId = pushMeta.id || pushMeta.push_id;
+        if (!normalizedPushId) {
+            return null;
+        }
+
+        const pushData = activePushes.get(normalizedPushId) || pushMeta;
+        return {
+            pushId: normalizedPushId,
+            pushData,
+            quizId: pushMeta.quiz_id || (pushData ? pushData.quiz_id : null)
+        };
+    }
+
+    return null;
+}
+
 // Undo push (teacher only)
-app.post('/api/pushes/:pushId/undo', authenticateToken, async (req, res) => {
+app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => {
     try {
         if (req.user.role !== 'teacher') {
             return res.status(403).json({ error: 'Teacher access required' });
         }
 
-        const { pushId } = req.params;
-        
-        if (!activePushes.has(pushId)) {
+        const { identifier } = req.params;
+        const resolvedPush = resolveActivePush(identifier);
+
+        if (!resolvedPush) {
             return res.status(404).json({ error: 'Push not found or already completed' });
         }
+
+        const { pushId, pushData, quizId: resolvedQuizId } = resolvedPush;
+        const targetQuizId = resolvedQuizId || (pushData ? pushData.quiz_id : null);
+        const pushCourseId = pushData ? pushData.course_id || null : null;
 
         // Clear timeout
         if (pushTimeouts.has(pushId)) {
@@ -2652,10 +2693,6 @@ app.post('/api/pushes/:pushId/undo', authenticateToken, async (req, res) => {
 
         // Mark as undone in database
         db.run('UPDATE quiz_pushes SET undone_at = CURRENT_TIMESTAMP WHERE id = ?', [pushId]);
-
-    const pushData = activePushes.get(pushId);
-    const quizId = pushData ? pushData.quiz_id : null;
-    const pushCourseId = pushData ? pushData.course_id || null : null;
 
         // Remove this specific push from all student queues in database
         await new Promise((resolve, reject) => {
@@ -2667,14 +2704,14 @@ app.post('/api/pushes/:pushId/undo', authenticateToken, async (req, res) => {
 
         // IMPORTANT: Also delete all responses for this quiz_id
         // This allows students to re-answer if teacher pushes again
-        if (quizId) {
+        if (targetQuizId) {
             await new Promise((resolve, reject) => {
-                db.run('DELETE FROM quiz_responses WHERE quiz_id = ? AND push_id = ?', [quizId, pushId], (err) => {
+                db.run('DELETE FROM quiz_responses WHERE quiz_id = ? AND push_id = ?', [targetQuizId, pushId], (err) => {
                     if (err) {
                         console.error('Error deleting responses:', err);
                         reject(err);
                     } else {
-                        console.log(`Deleted responses for quiz_id=${quizId}, push_id=${pushId}`);
+                        console.log(`Deleted responses for quiz_id=${targetQuizId}, push_id=${pushId}`);
                         resolve();
                     }
                 });
@@ -2683,15 +2720,18 @@ app.post('/api/pushes/:pushId/undo', authenticateToken, async (req, res) => {
 
         // Send undo only to students who received this specific push
         console.log('=== UNDO DEBUG ===');
-        console.log('Push ID:', pushId);
-        console.log('Quiz ID:', quizId);
+        console.log('Identifier:', identifier);
+        console.log('Resolved Push ID:', pushId);
+        console.log('Quiz ID:', targetQuizId);
         console.log('Push data exists:', !!pushData);
         
-        if (pushData && pushData.targetUsers) {
-            const connectedTargets = Array.from(connectedUsers.values())
-                .filter(user => user.role === 'student' && pushData.targetUsers.includes(user.userId));
+        const targetUsers = (pushData && Array.isArray(pushData.targetUsers)) ? pushData.targetUsers : [];
 
-            console.log('Target users for this push:', pushData.targetUsers);
+        if (targetUsers.length > 0) {
+            const connectedTargets = Array.from(connectedUsers.values())
+                .filter(user => user.role === 'student' && targetUsers.includes(user.userId));
+
+            console.log('Target users for this push:', targetUsers);
             console.log('Connected targets found:', connectedTargets.length);
             
             for (const student of connectedTargets) {
@@ -2727,11 +2767,13 @@ app.post('/api/pushes/:pushId/undo', authenticateToken, async (req, res) => {
             .filter(user => user.role === 'teacher');
         
         teachers.forEach(teacher => {
-            io.to(teacher.socketId).emit('push_undone', { push_id: pushId, quiz_id: quizId, course_id: pushCourseId });
+            io.to(teacher.socketId).emit('push_undone', { push_id: pushId, quiz_id: targetQuizId, course_id: pushCourseId });
         });
 
-        if (quizId) {
-            activePushesByQuiz.delete(quizId);
+        if (targetQuizId) {
+            activePushesByQuiz.delete(targetQuizId);
+        } else if (identifier) {
+            activePushesByQuiz.delete(identifier);
         }
 
         activePushes.delete(pushId);

@@ -412,6 +412,12 @@
             border-radius: 4px;
             border: 1px solid #e9ecef;
         }
+        .quiz-id-label {
+            font-size: 11px;
+            color: #6b7280;
+            margin: 4px 0 8px 0;
+            display: block;
+        }
         .category-section {
             margin-bottom: 25px;
         }
@@ -1443,16 +1449,20 @@
                     <div class="category-section">
                         <h4 class="category-title">${categoryName} (${categoryQuizzes.length})</h4>
                         ${categoryQuizzes.map(quiz => {
+                            const quizIdSafe = escapeHtml(String(quiz.id));
                             const activePush = activePushes.get(String(quiz.id));
                             const isSent = !!activePush;
                             const sentTime = isSent ? new Date(activePush.started_at).toLocaleTimeString() : '';
                             
+                            const activePushId = activePush ? (activePush.push_id || activePush.id || '') : '';
+                            const activePushIdEscaped = escapeHtml(String(activePushId));
                             return `
                             <div class="quiz-item" data-quiz-id="${quiz.id}">
                                 <h5>
                                     ${quiz.title}
                                     ${isSent ? `<span class="sent-badge">📤 SENT at ${sentTime}</span>` : ''}
                                 </h5>
+                                <span class="quiz-id-label">ID: ${quizIdSafe}</span>
                                 <div class="quiz-info">
                                     Type: ${quiz.question_type} | Timeout: ${quiz.timeout_seconds}s
                                     ${quiz.question_type === 'select' ? `| ${quiz.options.length} options` : ''}
@@ -1472,7 +1482,7 @@
                                         ${isSent ? 'Pushed' : 'Push'}
                                     </button>
                                     ${isSent ? `
-                                        <button class="btn btn-sm undo-sent-btn" onclick="undoPushByQuizId('${quiz.id}', '${activePush.push_id}')" title="Undo this sent quiz">
+                                        <button class="btn btn-sm undo-sent-btn" data-push-id="${activePushIdEscaped}" onclick="undoPushByQuizId('${quiz.id}', this.dataset.pushId)" title="Undo this sent quiz">
                                             🔙 Undo
                                         </button>
                                     ` : ''}
@@ -1535,9 +1545,13 @@
         }
 
         // Undo quiz push by quiz ID
-        async function undoPushByQuizId(quizId, pushId) {
+        async function undoPushByQuizId(quizId, pushId = '') {
             try {
-                const response = await fetch(`/api/pushes/${pushId}/undo`, {
+                const activePush = activePushes.get(String(quizId));
+                const candidatePushId = pushId && pushId.trim() ? pushId.trim() : '';
+                const identifier = candidatePushId || (activePush ? (activePush.push_id || activePush.id || '') : '') || quizId;
+
+                const response = await fetch(`/api/pushes/${encodeURIComponent(identifier)}/undo`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -1549,6 +1563,10 @@
                 if (response.ok) {
                     // Remove from active pushes
                     activePushes.delete(String(quizId));
+                    const resolvedPushId = candidatePushId || (activePush ? (activePush.push_id || activePush.id || '') : '');
+                    if (resolvedPushId) {
+                        activeResponses.delete(resolvedPushId);
+                    }
                     
                     // Re-render to remove sent badge
                     renderQuizzes();
@@ -1566,32 +1584,7 @@
 
         // Undo quiz push
         async function undoPush(quizId) {
-            const quizItem = document.querySelector(`[data-quiz-id="${quizId}"]`);
-            const undoBtn = quizItem.querySelector('.undo-btn');
-            const pushId = undoBtn.getAttribute('data-push-id');
-            
-            if (!pushId) return;
-
-            try {
-                const response = await fetch(`/api/pushes/${pushId}/undo`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (response.ok) {
-                    updateQuizButtons();
-                    activeResponses.delete(pushId);
-                    updateQueueStatus(); // Update queue after undo
-                } else {
-                    const data = await response.json();
-                    showNotification(data.error, 'error');
-                }
-            } catch (error) {
-                console.error('Undo push error:', error);
-                showNotification('Network error', 'error');
-            }
+            await undoPushByQuizId(quizId);
         }
 
         // Update quiz buttons after undo
