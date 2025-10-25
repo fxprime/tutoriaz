@@ -1,5 +1,7 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const socketIo = require('socket.io');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
@@ -9,13 +11,6 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
 
 // Configuration
 const PORT = process.env.PORT || 3030;
@@ -90,6 +85,80 @@ initializeDatabase();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+
+const resolvePath = (value) => {
+    if (!value) {
+        return null;
+    }
+    return path.resolve(__dirname, value);
+};
+
+const loadHttpsCredentials = () => {
+    const keyPathRaw = process.env.HTTPS_KEY_PATH;
+    const certPathRaw = process.env.HTTPS_CERT_PATH;
+
+    if (!keyPathRaw || !certPathRaw) {
+        return null;
+    }
+
+    try {
+        const keyPath = resolvePath(keyPathRaw.trim());
+        const certPath = resolvePath(certPathRaw.trim());
+        const credentials = {
+            key: fs.readFileSync(keyPath),
+            cert: fs.readFileSync(certPath)
+        };
+
+        const caEnv = process.env.HTTPS_CA_PATH;
+        if (caEnv) {
+            const caPaths = caEnv
+                .split(',')
+                .map(item => item.trim())
+                .filter(Boolean)
+                .map(item => resolvePath(item));
+
+            if (caPaths.length === 1) {
+                credentials.ca = fs.readFileSync(caPaths[0]);
+            } else if (caPaths.length > 1) {
+                credentials.ca = caPaths.map(caPath => fs.readFileSync(caPath));
+            }
+        }
+
+        if (process.env.HTTPS_PASSPHRASE) {
+            credentials.passphrase = process.env.HTTPS_PASSPHRASE;
+        }
+
+        return credentials;
+    } catch (error) {
+        console.error('Failed to load HTTPS credentials:', error);
+        return null;
+    }
+};
+
+let isHttpsEnabled = false;
+let server;
+
+const httpsCredentials = loadHttpsCredentials();
+if (httpsCredentials) {
+    try {
+        server = https.createServer(httpsCredentials, app);
+        isHttpsEnabled = true;
+        console.log('HTTPS enabled using provided certificate paths.');
+    } catch (error) {
+        console.error('Error creating HTTPS server. Falling back to HTTP:', error);
+    }
+}
+
+if (!server) {
+    server = http.createServer(app);
+}
+
+const io = socketIo(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 // In-memory stores for active connections and pushes
 const connectedUsers = new Map(); // socketId -> {userId, username, role, connectedAt}
@@ -3494,7 +3563,11 @@ app.get('/', (req, res) => {
 
 // Start server
 server.listen(PORT, HOST, () => {
-    console.log(`Server running on http://${HOST}:${PORT}`);
+    const protocol = isHttpsEnabled ? 'https' : 'http';
+    console.log(`Server running on ${protocol}://${HOST}:${PORT}`);
+    if (!isHttpsEnabled) {
+        console.log('HTTPS certificates not configured. Set HTTPS_KEY_PATH and HTTPS_CERT_PATH to enable TLS.');
+    }
     console.log(`Teacher login: username=teacher, password=admin123`);
     console.log(`Student login: username=student1, password=student123`);
 });

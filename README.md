@@ -38,7 +38,30 @@ npm run bootstrap
 npm start
 ```
 
-4. Open your browser to `http://localhost:3000`
+4. Open your browser to `http://localhost:3030` (or `https://localhost:3030` if HTTPS is configured)
+
+### Enable HTTPS (optional)
+
+You can run the Express + Socket.IO server over TLS without a reverse proxy.
+
+1. Generate a certificate (use [`mkcert`](https://github.com/FiloSottile/mkcert) or `openssl`):
+    ```bash
+    mkdir -p certs
+    mkcert -key-file certs/local-key.pem -cert-file certs/local-cert.pem localhost 127.0.0.1 ::1
+    # or
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout certs/local-key.pem -out certs/local-cert.pem -days 365
+    ```
+2. Export the certificate paths before starting the server:
+    ```bash
+    export HTTPS_KEY_PATH=certs/local-key.pem
+    export HTTPS_CERT_PATH=certs/local-cert.pem
+    # optional extras
+    # export HTTPS_CA_PATH=certs/rootCA.pem      # single file or comma-separated list
+    # export HTTPS_PASSPHRASE="your-passphrase"
+    npm start
+    ```
+
+If the key/cert cannot be loaded the server falls back to HTTP automatically. In production you can continue to terminate TLS at a reverse proxy (e.g., Nginx + Let's Encrypt) as described below.
 
 ### Demo Accounts
 
