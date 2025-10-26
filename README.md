@@ -26,7 +26,12 @@ Vibe coding By Modulemore via ChatGPT
 npm install
 ```
 
-2. Bootstrap the demo database:
+2. Initialize documentation submodule:
+```bash
+git submodule update --init --recursive
+```
+
+3. Bootstrap the demo database:
 ```bash
 npm run bootstrap
 ```
@@ -87,6 +92,45 @@ If the key/cert cannot be loaded the server falls back to HTTP automatically. In
 4. Submit answers within the time limit
 5. See confirmation when answers are submitted
 
+## Course Documentation
+
+Course materials are maintained in a separate repository (`course_esp32_basic`) and included as a Git submodule under `docs-site/`. The documentation uses MkDocs with Material theme.
+
+### Working with Documentation
+
+1. **Editing content**: Make changes inside `docs-site/docs/`
+2. **Preview locally**: 
+   ```bash
+   cd docs-site
+   pip install mkdocs mkdocs-material
+   mkdocs serve
+   ```
+3. **Build for production**:
+   ```bash
+   cd docs-site
+   mkdocs build
+   ```
+4. **Commit documentation changes**:
+   ```bash
+   cd docs-site
+   git add .
+   git commit -m "Update course content"
+   git push
+   ```
+5. **Update submodule pointer in main repo**:
+   ```bash
+   cd ..
+   git add docs-site
+   git commit -m "Update docs submodule pointer"
+   ```
+
+### Documentation Structure
+
+- **Course Overview**: `/docs/esp32/overview.md`
+- **Module Guides**: `/docs/esp32/module-XX.md`
+- **Reference Materials**: `/docs/esp32/appendix/`
+- **Shared Resources**: `/docs/shared/`
+
 ## Architecture
 
 - **Backend**: Node.js + Express + Socket.IO + SQLite
@@ -140,11 +184,15 @@ The platform uses these main tables:
 ```
 ├── server.js           # Main server application
 ├── schema.sql          # Database schema
+├── docs-site/          # Course documentation (MkDocs submodule)
+│   ├── mkdocs.yml      # MkDocs configuration
+│   └── docs/           # Markdown content
 ├── scripts/
 │   ├── bootstrapDemo.js  # Combined wipe + seed helper
 │   ├── createTeacher.js  # Standalone teacher seeding utility
 │   ├── createStudents.js # Standalone student batch creator
-│   └── seedQuizzes.js    # Standalone quiz seeding utility
+│   ├── seedQuizzes.js    # Standalone quiz seeding utility
+│   └── testPushUndo.js   # Integration test for push/undo flow
 ├── public/
 │   ├── index.html     # Login page
 │   ├── teacher.html   # Teacher dashboard
@@ -172,6 +220,7 @@ sudo su - esp32course
 ```bash
 git clone <your-repo> esp32-course-platform
 cd esp32-course-platform
+git submodule update --init --recursive  # Initialize docs submodule
 npm install --production
 npm run init-db
 ```
