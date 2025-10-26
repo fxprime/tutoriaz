@@ -50,9 +50,18 @@
             position: relative;
         }
         .course-content {
-            max-width: 800px;
-            margin: 0 auto;
+            max-width: none;
+            margin: 0;
             line-height: 1.6;
+        }
+        .course-docs-container {
+            margin-top: 20px;
+        }
+        .course-docs-frame {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
         }
         .course-content h2 {
             color: #333;
@@ -603,6 +612,72 @@
             background-color: #dc2626;
             color: #ffffff;
         }
+
+        /* Course Documentation Styles */
+        .course-docs-container {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+            margin-bottom: 24px;
+        }
+        .course-docs-container.hidden {
+            display: none;
+        }
+        .docs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .docs-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #1f2937;
+        }
+        .docs-controls {
+            display: flex;
+            gap: 8px;
+        }
+        .docs-btn {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background-color: #ffffff;
+            color: #374151;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .docs-btn:hover {
+            background-color: #f9fafb;
+            border-color: #9ca3af;
+        }
+        .course-docs-frame {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background-color: #ffffff;
+        }
+        .default-course-content {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+        }
+        .default-course-content h3 {
+            color: #1f2937;
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+        .default-course-content p {
+            color: #4b5563;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
     </style>
 </head>
 <body>
@@ -660,66 +735,19 @@
                     <h2 id="courseTitleHeading">Course Materials</h2>
                     <p id="courseDescriptionText" class="course-description">Select an enrolled course from the lobby to see its details and materials.</p>
                     
-                    <h3>Welcome to the Interactive ESP32 Course</h3>
-                    <p>This is a sample course content page. In a real implementation, this content would be loaded from your documentation system (GitBook, MkDocs, Docusaurus, etc.).</p>
-                    
-                    <h3>Course Overview</h3>
-                    <p>In this course, you will learn:</p>
-                    <ul>
-                        <li>ESP32 microcontroller basics</li>
-                        <li>Setting up the development environment</li>
-                        <li>GPIO control and digital I/O</li>
-                        <li>Analog input and output</li>
-                        <li>WiFi connectivity</li>
-                        <li>Bluetooth communication</li>
-                        <li>Sensor interfacing</li>
-                        <li>Real-time operating system (RTOS) concepts</li>
-                    </ul>
-
-                    <h3>Getting Started</h3>
-                    <p>Before we begin programming, let's understand the ESP32 hardware:</p>
-                    
-                    <div class="code-block">
-// Basic ESP32 setup
-#include "WiFi.h"
-
-void setup() {
-    Serial.begin(115200);
-    Serial.println("ESP32 Course Starting...");
-    
-    // Initialize WiFi
-    WiFi.begin("YOUR_SSID", "YOUR_PASSWORD");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("WiFi connected!");
-}
-
-void loop() {
-    // Your main code here
-}
+                    <div id="courseDocsContainer" class="course-docs-container">
+                        <div class="docs-header">
+                            <h3>📚 Course Documentation (LIVE)</h3>
+                            <div class="docs-controls">
+                                <button class="docs-btn" onclick="toggleDocsView()">Hide Docs</button>
+                                <button class="docs-btn" onclick="openDocsNewTab()" title="Open in new tab">📋</button>
+                            </div>
+                        </div>
+                        <iframe id="courseDocsFrame" class="course-docs-frame" src=""></iframe>
                     </div>
-
-                    <h3>Hardware Requirements</h3>
-                    <ul>
-                        <li>ESP32 development board</li>
-                        <li>USB cable for programming</li>
-                        <li>Breadboard and jumper wires</li>
-                        <li>LEDs and resistors</li>
-                        <li>Various sensors (temperature, humidity, etc.)</li>
-                    </ul>
-
-                    <h3>Interactive Learning</h3>
-                    <p>During this course, your teacher will send interactive quizzes and questions that will appear as overlays on this page. Make sure to:</p>
-                    <ul>
-                        <li>Stay connected to receive real-time updates</li>
-                        <li>Answer quizzes promptly within the given time limit</li>
-                        <li>Ask questions if you need clarification</li>
-                        <li>Practice the examples on your ESP32 board</li>
-                    </ul>
-
-                    <p><strong>Note:</strong> This content area would normally contain your full course documentation, embedded via iframe or direct content integration.</p>
+                    
+                    <!-- Default course content removed - will be replaced with iframe documentation -->
+                </div>
                 </div>
             </div>
         </div>
@@ -1337,6 +1365,72 @@ void loop() {
             const descriptionEl = document.getElementById('courseDescriptionText');
             if (descriptionEl) {
                 descriptionEl.textContent = course.description ? course.description : 'Your teacher has not added a description yet.';
+            }
+
+            // Load course documentation if available
+            loadCourseDocumentation(course);
+        }
+
+        function loadCourseDocumentation(courseData) {
+            console.log('Loading course documentation for:', courseData);
+            
+            if (courseData.docs_repo_url) {
+                console.log('Documentation URL found:', courseData.docs_repo_url);
+                const docsContainer = document.getElementById('courseDocsContainer');
+                const docsFrame = document.getElementById('courseDocsFrame');
+                const docsControls = document.querySelector('.docs-controls');
+                
+                if (docsContainer && docsFrame) {
+                    docsContainer.classList.remove('hidden');
+                    if (docsControls) docsControls.style.display = 'flex';
+                    
+                    // Construct documentation URL (GitHub Pages or hosted MkDocs site)
+                    let docsUrl = courseData.docs_repo_url;
+                    
+                    // If it's a GitHub repo URL, convert to GitHub Pages URL
+                    if (docsUrl.includes('github.com')) {
+                        const repoPath = docsUrl.replace('https://github.com/', '');
+                        const [owner, repo] = repoPath.split('/');
+                        docsUrl = `https://${owner}.github.io/${repo}/`;
+                        
+                        // Add branch/path if specified
+                        if (courseData.docs_branch && courseData.docs_branch !== 'main') {
+                            docsUrl += `${courseData.docs_branch}/`;
+                        }
+                        if (courseData.docs_path) {
+                            docsUrl += courseData.docs_path;
+                        }
+                    }
+                    
+                    docsFrame.src = docsUrl;
+                    console.log('Loading docs from:', docsUrl);
+                }
+            } else {
+                // No documentation available, hide docs container
+                const docsContainer = document.getElementById('courseDocsContainer');
+                if (docsContainer) {
+                    docsContainer.classList.add('hidden');
+                }
+            }
+        }
+
+        function toggleDocsView() {
+            const docsFrame = document.getElementById('courseDocsFrame');
+            const toggleBtn = document.querySelector('.docs-btn');
+            
+            if (docsFrame.style.display === 'none') {
+                docsFrame.style.display = 'block';
+                toggleBtn.textContent = 'Hide Docs';
+            } else {
+                docsFrame.style.display = 'none';
+                toggleBtn.textContent = 'Show Docs';
+            }
+        }
+
+        function openDocsNewTab() {
+            const docsFrame = document.getElementById('courseDocsFrame');
+            if (docsFrame.src) {
+                window.open(docsFrame.src, '_blank');
             }
         }
 

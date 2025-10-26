@@ -222,11 +222,18 @@
         .main-content {
             display: flex;
             height: calc(100vh - 60px);
+            position: relative;
+            overflow: visible;
         }
         .content-area {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
+            transition: all 0.3s ease;
+        }
+        .main-content.sidebar-collapsed .content-area {
+            width: 100%;
+            margin-right: 0;
         }
         .sidebar {
             width: 450px;
@@ -234,10 +241,57 @@
             border-left: 1px solid #ddd;
             display: flex;
             flex-direction: column;
+            height: 100%;
+            overflow-y: auto;
+            transition: all 0.3s ease;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .main-content.sidebar-collapsed .sidebar {
+            width: 0;
+            min-width: 0;
+            border: none;
+            overflow: hidden;
+        }
+        .sidebar-toggle {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .main-content.sidebar-collapsed .sidebar-toggle {
+            position: fixed;
+            right: 20px;
+            top: 80px;
+            left: auto;
+            background-color: #28a745;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .sidebar-toggle:hover {
+            background-color: #0056b3;
         }
         .sidebar-section {
             padding: 20px;
             border-bottom: 1px solid #eee;
+        }
+        .sidebar-section.quiz-section {
+            flex: 1;
+            overflow-y: auto;
         }
         .sidebar-section h3 {
             margin-bottom: 15px;
@@ -549,6 +603,37 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             min-height: 400px;
         }
+        
+        /* Teacher Documentation Styles */
+        .teacher-docs-container {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+            min-height: 400px;
+        }
+        .teacher-docs-container.hidden {
+            display: none;
+        }
+        .teacher-docs-frame {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background-color: #ffffff;
+        }
+        .teacher-docs-placeholder {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            color: #6c757d;
+            min-height: 400px;
+        }
+        .teacher-docs-placeholder h3 {
+            color: #495057;
+            margin-top: 0;
+        }
+        
         .status-indicator {
             display: inline-block;
             width: 8px;
@@ -698,20 +783,27 @@
             </div>
 
             <div class="iframe-container">
-                <h3>ESP32 Course Documentation</h3>
-                <p>This area would contain your course documentation. You can embed:</p>
-                <ul>
-                    <li>GitBook documentation</li>
-                    <li>MkDocs generated docs</li>
-                    <li>Docusaurus site</li>
-                    <li>Any educational content</li>
-                </ul>
-                <p><em>Example iframe integration:</em></p>
-                <code>&lt;iframe src="/docs" width="100%" height="500px"&gt;&lt;/iframe&gt;</code>
+                <div id="teacherDocsContainer" class="teacher-docs-container">
+                    <div class="docs-header">
+                        <h3>📚 Course Documentation (LIVE)</h3>
+                        <div class="docs-controls">
+                            <button class="docs-btn" onclick="toggleTeacherDocsView()">Hide Docs</button>
+                            <button class="docs-btn" onclick="openTeacherDocsNewTab()" title="Open in new tab">📋</button>
+                        </div>
+                    </div>
+                    <iframe id="teacherDocsFrame" class="teacher-docs-frame" src=""></iframe>
+                </div>
+                
+                <!-- Default placeholder when no course documentation is available -->
+                <div id="teacherDocsPlaceholder" class="teacher-docs-placeholder" style="display: none;">
+                    <h3>Course Documentation</h3>
+                    <p>Documentation content removed - will be replaced with iframe when available.</p>
+                </div>
             </div>
         </div>
 
         <div class="sidebar">
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
             <div class="sidebar-section">
                 <h3>Online Students (<span id="studentCount">0</span>)</h3>
                 <div class="online-students" id="onlineStudents">
@@ -1110,6 +1202,95 @@
                 const createdAt = course.created_at ? new Date(course.created_at).toLocaleString() : '';
                 const enrollment = typeof course.enrollment_count === 'number' ? course.enrollment_count : 0;
                 metaEl.textContent = `${createdAt ? `Created ${createdAt}` : ''}${createdAt ? ' • ' : ''}Enrolled: ${enrollment}`;
+            }
+
+            // Load course documentation
+            loadTeacherCourseDocumentation(course);
+        }
+
+        function loadTeacherCourseDocumentation(courseData) {
+            console.log('Loading teacher course documentation for:', courseData);
+            
+            const docsContainer = document.getElementById('teacherDocsContainer');
+            const docsFrame = document.getElementById('teacherDocsFrame');
+            const docsPlaceholder = document.getElementById('teacherDocsPlaceholder');
+            
+            if (courseData && courseData.docs_repo_url) {
+                // Show documentation container
+                if (docsContainer) {
+                    docsContainer.classList.remove('hidden');
+                    docsContainer.style.display = 'block';
+                }
+                if (docsPlaceholder) {
+                    docsPlaceholder.style.display = 'none';
+                }
+                
+                // Load the documentation in iframe
+                if (docsFrame) {
+                    let docsUrl = courseData.docs_repo_url;
+                    
+                    // If it's a GitHub repo URL, convert to GitHub Pages URL
+                    if (docsUrl.includes('github.com')) {
+                        const repoPath = docsUrl.replace('https://github.com/', '');
+                        const [owner, repo] = repoPath.split('/');
+                        docsUrl = `https://${owner}.github.io/${repo}/`;
+                        
+                        // Add branch/path if specified
+                        if (courseData.docs_branch && courseData.docs_branch !== 'main') {
+                            docsUrl += `${courseData.docs_branch}/`;
+                        }
+                        if (courseData.docs_path) {
+                            docsUrl += courseData.docs_path;
+                        }
+                    }
+                    
+                    docsFrame.src = docsUrl;
+                    console.log('Loading teacher docs from:', docsUrl);
+                }
+            } else {
+                // No documentation available, show placeholder
+                if (docsContainer) {
+                    docsContainer.classList.add('hidden');
+                }
+                if (docsPlaceholder) {
+                    docsPlaceholder.style.display = 'block';
+                }
+            }
+        }
+
+        function toggleTeacherDocsView() {
+            const docsFrame = document.getElementById('teacherDocsFrame');
+            const toggleBtn = document.querySelector('.teacher-docs-container .docs-btn');
+            
+            if (docsFrame.style.display === 'none') {
+                docsFrame.style.display = 'block';
+                if (toggleBtn) toggleBtn.textContent = 'Hide Docs';
+            } else {
+                docsFrame.style.display = 'none';
+                if (toggleBtn) toggleBtn.textContent = 'Show Docs';
+            }
+        }
+
+        function openTeacherDocsNewTab() {
+            const docsFrame = document.getElementById('teacherDocsFrame');
+            if (docsFrame.src) {
+                window.open(docsFrame.src, '_blank');
+            }
+        }
+
+        function toggleSidebar() {
+            const mainContent = document.querySelector('.main-content');
+            const toggleBtn = document.querySelector('.sidebar-toggle');
+            
+            mainContent.classList.toggle('sidebar-collapsed');
+            
+            // Update button icon and tooltip
+            if (mainContent.classList.contains('sidebar-collapsed')) {
+                toggleBtn.innerHTML = '☰';
+                toggleBtn.title = 'Show Sidebar';
+            } else {
+                toggleBtn.innerHTML = '‹';
+                toggleBtn.title = 'Hide Sidebar';
             }
         }
 

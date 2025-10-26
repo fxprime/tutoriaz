@@ -86,6 +86,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Serve course documentation statically
+app.use('/docs', express.static('courses'));
+
 const resolvePath = (value) => {
     if (!value) {
         return null;
@@ -907,7 +910,8 @@ const getCoursesForTeacher = (teacherId) => {
                     enrollment_count: Number(row.enrollment_count || 0),
                     requires_access_code: Boolean(row.access_code_hash),
                     docs_repo_url: row.docs_repo_url,
-                    docs_branch: row.docs_branch || 'main'
+                    docs_branch: row.docs_branch || 'main',
+                    docs_path: row.docs_path
                 }));
                 resolve(mapped);
             }
@@ -942,7 +946,10 @@ const getCoursesForStudent = (studentId) => {
                     teacher_display_name: row.teacher_display_name,
                     teacher_username: row.teacher_username,
                     is_enrolled: Boolean(row.is_enrolled),
-                    requires_access_code: Boolean(row.access_code_hash)
+                    requires_access_code: Boolean(row.access_code_hash),
+                    docs_repo_url: row.docs_repo_url,
+                    docs_branch: row.docs_branch,
+                    docs_path: row.docs_path
                 }));
                 resolve(mapped);
             }
