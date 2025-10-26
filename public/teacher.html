@@ -859,6 +859,21 @@
         let selectedCourseId = null;
         let lastGeneratedPasskey = '';
         let activeStudentDetailId = null;
+        let baseUrl = window.location.origin; // Default fallback
+
+        // Fetch app configuration
+        async function fetchAppConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    baseUrl = config.baseUrl;
+                    console.log('Base URL configured:', baseUrl);
+                }
+            } catch (error) {
+                console.warn('Could not fetch app config, using default:', error);
+            }
+        }
 
         function escapeHtml(value) {
             if (value === null || value === undefined) {
@@ -1228,6 +1243,11 @@
                 // Load the documentation in iframe
                 if (docsFrame) {
                     let docsUrl = courseData.docs_repo_url;
+                    
+                    // Convert localhost URLs to use current host/baseUrl
+                    if (docsUrl.includes('localhost:3030')) {
+                        docsUrl = docsUrl.replace('http://localhost:3030', baseUrl);
+                    }
                     
                     // If it's a GitHub repo URL, convert to GitHub Pages URL
                     if (docsUrl.includes('github.com')) {
@@ -2621,6 +2641,9 @@
             }
             window.location.href = '/';
         }
+
+        // Initialize configuration on page load
+        fetchAppConfig();
     </script>
 </body>
 </html>

@@ -861,6 +861,21 @@
         let passiveModalVisible = false;
         let passiveModalSession = null;
         let latestAttendanceSession = null;
+        let baseUrl = window.location.origin; // Default fallback
+
+        // Fetch app configuration
+        async function fetchAppConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    baseUrl = config.baseUrl;
+                    console.log('Base URL configured:', baseUrl);
+                }
+            } catch (error) {
+                console.warn('Could not fetch app config, using default:', error);
+            }
+        }
 
         function normalizeCourseId(value) {
             if (value === null || value === undefined || value === '') {
@@ -1386,6 +1401,11 @@
                     
                     // Construct documentation URL (GitHub Pages or hosted MkDocs site)
                     let docsUrl = courseData.docs_repo_url;
+                    
+                    // Convert localhost URLs to use current host/baseUrl
+                    if (docsUrl.includes('localhost:3030')) {
+                        docsUrl = docsUrl.replace('http://localhost:3030', baseUrl);
+                    }
                     
                     // If it's a GitHub repo URL, convert to GitHub Pages URL
                     if (docsUrl.includes('github.com')) {
@@ -2569,6 +2589,9 @@
                 showNotification('Failed to cleanup orphaned quizzes', 'error');
             }
         }
+
+        // Initialize configuration on page load
+        fetchAppConfig();
     </script>
 </body>
 </html>

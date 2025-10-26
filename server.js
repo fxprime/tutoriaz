@@ -16,6 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 3030;
 const HOST = process.env.HOST || '0.0.0.0';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const BASE_URL = process.env.BASE_URL || `http://${HOST}:${PORT}`;
 const DB_PATH = path.join(__dirname, 'database.sqlite');
 
 // Database connection
@@ -1633,6 +1634,14 @@ app.delete('/api/courses/:courseId', authenticateToken, async (req, res) => {
         console.error('Delete course error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
+});
+
+// App configuration endpoint
+app.get('/api/config', (req, res) => {
+    res.json({
+        baseUrl: BASE_URL,
+        environment: process.env.NODE_ENV || 'development'
+    });
 });
 
 // List courses (context-aware)
