@@ -623,6 +623,15 @@
                 </div>
                 <button type="button" id="generateLobbyPasskey" class="generate-btn">Generate</button>
             </div>
+            <div class="form-row">
+                <label for="lobbyDocsRepoUrl">Documentation Repository (Optional)</label>
+                <input type="url" id="lobbyDocsRepoUrl" placeholder="https://github.com/username/course-docs.git">
+                <small>Link to course materials repository (GitHub, GitLab, etc.)</small>
+            </div>
+            <div class="form-row">
+                <label for="lobbyDocsBranch">Docs Branch</label>
+                <input type="text" id="lobbyDocsBranch" placeholder="main" value="main">
+            </div>
             <p class="lobby-intro">Passkeys are only displayed once. Save it now before sending to students.</p>
             <button type="submit" class="primary-btn">Create Course</button>
         </form>
@@ -1156,6 +1165,9 @@
             const titleInput = document.getElementById('lobbyCourseTitle');
             const descriptionInput = document.getElementById('lobbyCourseDescription');
             const passkeyInput = document.getElementById('lobbyCoursePasskey');
+            const docsRepoInput = document.getElementById('lobbyDocsRepoUrl');
+            const docsBranchInput = document.getElementById('lobbyDocsBranch');
+            
             if (!titleInput || !passkeyInput) {
                 return;
             }
@@ -1163,6 +1175,8 @@
             const title = titleInput.value.trim();
             const description = descriptionInput ? descriptionInput.value.trim() : '';
             const passkey = passkeyInput.value.trim();
+            const docsRepoUrl = docsRepoInput ? docsRepoInput.value.trim() : '';
+            const docsBranch = docsBranchInput ? docsBranchInput.value.trim() || 'main' : 'main';
 
             if (!title) {
                 showNotification('Course title is required.', 'error');
@@ -1174,17 +1188,24 @@
             }
 
             try {
+                const payload = {
+                    title,
+                    description,
+                    access_code: passkey
+                };
+
+                if (docsRepoUrl) {
+                    payload.docs_repo_url = docsRepoUrl;
+                    payload.docs_branch = docsBranch;
+                }
+
                 const response = await fetch('/api/courses', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        title,
-                        description,
-                        access_code: passkey
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
@@ -1198,6 +1219,12 @@
                     descriptionInput.value = '';
                 }
                 passkeyInput.value = '';
+                if (docsRepoInput) {
+                    docsRepoInput.value = '';
+                }
+                if (docsBranchInput) {
+                    docsBranchInput.value = 'main';
+                }
 
                 await loadTeacherCourses();
                 selectCourse(data.course.id);

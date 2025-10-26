@@ -1,3 +1,6 @@
 [submodule "docs-site"]
 	path = docs-site
 	url = git@github.com:fxprime/course_esp32_basic.git
+[submodule "courses/esp32_basic"]
+	path = courses/esp32_basic
+	url = https://github.com/fxprime/course_esp32_basic.git

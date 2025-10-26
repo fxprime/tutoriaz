@@ -862,11 +862,20 @@ const createResponseInDB = (response) => {
 const createCourseInDB = (course) => {
     return new Promise((resolve, reject) => {
         const stmt = db.prepare(`
-            INSERT INTO courses (id, title, description, created_by, created_at, access_code_hash)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO courses (id, title, description, created_by, created_at, access_code_hash, docs_repo_url, docs_branch)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         stmt.run(
-            [course.id, course.title, course.description || '', course.created_by, course.created_at, course.access_code_hash || null],
+            [
+                course.id, 
+                course.title, 
+                course.description || '', 
+                course.created_by, 
+                course.created_at, 
+                course.access_code_hash || null,
+                course.docs_repo_url || null,
+                course.docs_branch || 'main'
+            ],
             function(err) {
                 if (err) reject(err);
                 else resolve({ id: course.id, ...course });
@@ -896,7 +905,9 @@ const getCoursesForTeacher = (teacherId) => {
                     created_by: row.created_by,
                     created_at: row.created_at,
                     enrollment_count: Number(row.enrollment_count || 0),
-                    requires_access_code: Boolean(row.access_code_hash)
+                    requires_access_code: Boolean(row.access_code_hash),
+                    docs_repo_url: row.docs_repo_url,
+                    docs_branch: row.docs_branch || 'main'
                 }));
                 resolve(mapped);
             }
@@ -1483,7 +1494,7 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Teacher access required' });
         }
 
-        const { title, description, access_code } = req.body || {};
+        const { title, description, access_code, docs_repo_url, docs_branch } = req.body || {};
         if (!title || !String(title).trim()) {
             return res.status(400).json({ error: 'Course title required' });
         }
@@ -1505,7 +1516,9 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             description: (description && String(description).trim()) || '',
             created_by: req.user.userId,
             created_at: new Date().toISOString(),
-            access_code_hash: accessCodeHash
+            access_code_hash: accessCodeHash,
+            docs_repo_url: (docs_repo_url && String(docs_repo_url).trim()) || null,
+            docs_branch: (docs_branch && String(docs_branch).trim()) || 'main'
         };
 
         const saved = await createCourseInDB(course);
@@ -1516,7 +1529,9 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             created_by: saved.created_by,
             created_at: saved.created_at,
             enrollment_count: 0,
-            requires_access_code: true
+            requires_access_code: true,
+            docs_repo_url: saved.docs_repo_url,
+            docs_branch: saved.docs_branch
         };
 
         res.status(201).json({ course: responseCourse, passkey: trimmedAccessCode });
