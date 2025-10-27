@@ -7,3 +7,7 @@ dist/
 __pycache__/
 *.log
 .vscode/
+
+# Netlify build outputs
+.netlify/
+*.db

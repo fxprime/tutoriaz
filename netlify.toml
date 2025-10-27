@@ -1,0 +1,67 @@
+[build]
+  # Build command (ไม่จำเป็นสำหรับ Node.js app แต่ Netlify ต้องการ)
+  command = "npm run build"
+  
+  # Directory ที่จะ serve (สำหรับ static files)
+  publish = "public"
+  
+  # Functions directory สำหรับ Netlify Functions
+  functions = "netlify/functions"
+
+[build.environment]
+  # Node.js version
+  NODE_VERSION = "18"
+  
+  # Environment variables สำหรับ build
+  NODE_ENV = "production"
+
+# Netlify Functions สำหรับ API endpoints
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/server/:splat"
+  status = 200
+
+# Serve static files
+[[redirects]]
+  from = "/docs/*"
+  to = "/docs/:splat"
+  status = 200
+
+# SPA fallback สำหรับ client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  conditions = {Role = ["admin"]}
+
+# Headers สำหรับ CORS และ security
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+[[headers]]
+  for = "/docs/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    Content-Security-Policy = "frame-ancestors 'self'"
+
+# Environment variables สำหรับ production
+[context.production.environment]
+  BASE_URL = "https://tutoriaz-app.netlify.app"
+  NODE_ENV = "production"
+  JWT_SECRET = "your-secure-jwt-secret-for-production"
+  PORT = "8888"
+  HOST = "0.0.0.0"
+
+# Environment variables สำหรับ branch previews
+[context.branch-deploy.environment]
+  BASE_URL = "$DEPLOY_PRIME_URL"
+  NODE_ENV = "staging"
+  JWT_SECRET = "staging-jwt-secret"
+
+# ป้องกัน build สำหรับ file changes ที่ไม่จำเป็น
+[build.ignore]
+  command = "git diff --quiet HEAD^ HEAD -- . ':(exclude)README.md' ':(exclude)*.md'"
