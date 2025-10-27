@@ -1,16 +1,11 @@
 const serverless = require('serverless-http');
-
-// Import the existing Express app
-// Since we can't directly import the server.js due to it starting a server,
-// we'll create a simplified version for Netlify Functions
-
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -18,17 +13,30 @@ const app = express();
 const BASE_URL = process.env.BASE_URL || process.env.URL || 'http://localhost:8888';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Database path for Netlify (temporary storage)
-const DB_PATH = '/tmp/database.sqlite';
-
-// Initialize database
+// Database setup for Netlify
 let db;
 function initDB() {
     if (!db) {
-        db = new sqlite3.Database(DB_PATH);
+        // Try to use pre-built database first, then fallback to temp
+        const preBuiltDB = path.join(__dirname, 'database.sqlite');
+        const tempDB = '/tmp/database.sqlite';
         
+        let dbPath = tempDB;
+        
+        // Copy pre-built database to temp if it exists
+        if (fs.existsSync(preBuiltDB)) {
+            console.log('Using pre-built database');
+            fs.copyFileSync(preBuiltDB, tempDB);
+            dbPath = tempDB;
+        } else {
+            console.log('Creating new database at runtime');
+            dbPath = tempDB;
+        }
+        
+        db = new sqlite3.Database(dbPath);
+        
+        // Create tables if they don't exist (fallback)
         db.serialize(() => {
-            // Create users table
             db.run(`CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -38,7 +46,6 @@ function initDB() {
                 created_at TEXT NOT NULL
             )`);
             
-            // Create courses table
             db.run(`CREATE TABLE IF NOT EXISTS courses (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -52,22 +59,28 @@ function initDB() {
                 FOREIGN KEY(created_by) REFERENCES users(id)
             )`);
             
-            // Insert default users
-            const teacherHash = bcrypt.hashSync('admin123', 10);
-            const studentHash = bcrypt.hashSync('student123', 10);
-            
-            db.run(`INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?, ?, ?)`, 
-                ['teacher-id', 'teacher', 'Teacher', teacherHash, 'teacher', new Date().toISOString()]);
-            
-            db.run(`INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?, ?, ?)`, 
-                ['student-id', 'student1', 'Student 1', studentHash, 'student', new Date().toISOString()]);
-            
-            // Insert ESP32 course
-            db.run(`INSERT OR IGNORE INTO courses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-                ['esp32-course', 'ESP32 Fundamentals', 'Learn ESP32 basics', 'teacher-id', 
-                 new Date().toISOString(), null, `${BASE_URL}/docs/esp32_basic/site/`, 'main', '']);
+            // Only insert if no users exist (for runtime fallback)
+            db.get('SELECT COUNT(*) as count FROM users', (err, row) => {
+                if (!err && row.count === 0) {
+                    console.log('No users found, creating default users');
+                    const teacherHash = bcrypt.hashSync('admin123', 10);
+                    const studentHash = bcrypt.hashSync('student123', 10);
+                    
+                    db.run(`INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)`, 
+                        ['teacher-id', 'teacher', 'Teacher', teacherHash, 'teacher', new Date().toISOString()]);
+                    
+                    db.run(`INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)`, 
+                        ['student-id', 'student1', 'Student 1', studentHash, 'student', new Date().toISOString()]);
+                    
+                    // Insert ESP32 course
+                    db.run(`INSERT INTO courses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+                        ['esp32-course', 'ESP32 Fundamentals', 'Learn ESP32 basics', 'teacher-id', 
+                         new Date().toISOString(), null, `${BASE_URL}/docs/esp32_basic/site/`, 'main', '']);
+                }
+            });
         });
     }
+    return db;
 }
 
 // Middleware
@@ -147,14 +160,52 @@ app.get('/api/me', authenticateToken, (req, res) => {
 });
 
 app.get('/api/courses', authenticateToken, (req, res) => {
-    initDB();
+    const db = initDB();
     
-    db.all('SELECT * FROM courses', (err, courses) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-        res.json({ courses });
-    });
+    if (req.user.role === 'teacher') {
+        db.all(`
+            SELECT c.*,
+                   COUNT(DISTINCT ce.student_id) as enrollment_count
+            FROM courses c
+            LEFT JOIN course_enrollments ce ON c.id = ce.course_id
+            WHERE c.created_by = ?
+            GROUP BY c.id
+            ORDER BY c.created_at DESC
+        `, [req.user.userId], (err, courses) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+            res.json({ courses: courses || [] });
+        });
+    } else if (req.user.role === 'student') {
+        db.all(`
+            SELECT c.*,
+                   u.username as teacher_username,
+                   u.display_name as teacher_display_name,
+                   CASE WHEN ce.id IS NOT NULL THEN 1 ELSE 0 END as is_enrolled
+            FROM courses c
+            LEFT JOIN users u ON c.created_by = u.id
+            LEFT JOIN course_enrollments ce ON c.id = ce.course_id AND ce.student_id = ?
+            ORDER BY c.created_at DESC
+        `, [req.user.userId], (err, courses) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+            
+            const normalized = courses.map(course => ({
+                ...course,
+                is_enrolled: Boolean(course.is_enrolled),
+                teacher_display_name: course.teacher_display_name || course.teacher_username,
+                teacher_username: course.teacher_username
+            }));
+            
+            res.json({ courses: normalized });
+        });
+    } else {
+        res.status(403).json({ error: 'Invalid role' });
+    }
 });
 
 // Export for Netlify Functions

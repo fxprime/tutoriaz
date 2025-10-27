@@ -282,6 +282,9 @@ async function applySchema(db) {
             created_by TEXT NOT NULL,
             created_at TEXT NOT NULL,
             access_code_hash TEXT,
+            docs_repo_url TEXT,
+            docs_branch TEXT DEFAULT 'main',
+            docs_path TEXT,
             FOREIGN KEY(created_by) REFERENCES users(id)
         );
         CREATE TABLE IF NOT EXISTS course_enrollments (
@@ -373,6 +376,11 @@ async function createStudents(db, studentsConfig) {
 async function ensureCourse(db, courseConfig, teacherId) {
     const now = new Date().toISOString();
     const accessCodeHash = courseConfig.passkey ? await bcrypt.hash(courseConfig.passkey, 10) : null;
+    
+    // Set ESP32 documentation URL for ESP32 course
+    const docsUrl = courseConfig.title.includes('ESP32') 
+        ? 'http://localhost:3030/docs/esp32_basic/site/' 
+        : null;
 
     const existing = await get(
         db,
@@ -384,9 +392,9 @@ async function ensureCourse(db, courseConfig, teacherId) {
         await run(
             db,
             `UPDATE courses
-             SET description = ?, access_code_hash = ?
+             SET description = ?, access_code_hash = ?, docs_repo_url = ?, docs_branch = ?, docs_path = ?
              WHERE id = ?`,
-            [courseConfig.description || '', accessCodeHash, existing.id]
+            [courseConfig.description || '', accessCodeHash, docsUrl, 'main', '', existing.id]
         );
 
         return { id: existing.id, isNew: false };
@@ -395,9 +403,9 @@ async function ensureCourse(db, courseConfig, teacherId) {
     const courseId = uuidv4();
     await run(
         db,
-        `INSERT INTO courses (id, title, description, created_by, created_at, access_code_hash)
-         VALUES (?, ?, ?, ?, ?, ?)` ,
-        [courseId, courseConfig.title, courseConfig.description || '', teacherId, now, accessCodeHash]
+        `INSERT INTO courses (id, title, description, created_by, created_at, access_code_hash, docs_repo_url, docs_branch, docs_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+        [courseId, courseConfig.title, courseConfig.description || '', teacherId, now, accessCodeHash, docsUrl, 'main', '']
     );
 
     return { id: courseId, isNew: true };
