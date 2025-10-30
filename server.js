@@ -14,7 +14,7 @@ const app = express();
 
 // Configuration
 const PORT = process.env.PORT || 3030;
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || '127.0.0.1';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const BASE_URL = process.env.BASE_URL || `http://${HOST}:${PORT}`;
 const DB_PATH = path.join(__dirname, 'database.sqlite');
