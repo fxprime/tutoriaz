@@ -853,8 +853,11 @@
         let quizzes = [];
         let categories = [];
         let onlineStudents = [];
-        let activeResponses = new Map(); // pushId -> responses array
-        let activePushes = new Map(); // quizId -> {push_id, started_at, quiz_id, title}
+    let activeResponses = new Map(); // pushId -> responses array
+
+    // Track active pushes keyed by quiz ID to align with undo semantics.
+    // Each entry holds { push_id, quiz_id, course_id, started_at, title }.
+    let activePushesByQuiz = new Map();
         let teacherCourses = [];
         let selectedCourseId = null;
         let lastGeneratedPasskey = '';
@@ -1624,7 +1627,7 @@
         // Load active pushes from server
         async function loadActivePushes() {
             if (!selectedCourseId) {
-                activePushes.clear();
+                activePushesByQuiz.clear();
                 return;
             }
             try {
@@ -1638,9 +1641,12 @@
                 
                 if (response.ok && data.active_pushes) {
                     // Clear and rebuild activePushes map
-                    activePushes.clear();
+                    activePushesByQuiz.clear();
                     data.active_pushes.forEach(push => {
-                        activePushes.set(String(push.quiz_id), push);
+                        const key = String(push.quiz_id || '').trim();
+                        if (key) {
+                            activePushesByQuiz.set(key, push);
+                        }
                     });
                 }
             } catch (error) {
@@ -1678,7 +1684,8 @@
                         <h4 class="category-title">${categoryName} (${categoryQuizzes.length})</h4>
                         ${categoryQuizzes.map(quiz => {
                             const quizIdSafe = escapeHtml(String(quiz.id));
-                            const activePush = activePushes.get(String(quiz.id));
+                            const quizKey = String(quiz.id || '').trim();
+                            const activePush = quizKey ? activePushesByQuiz.get(quizKey) : null;
                             const isSent = !!activePush;
                             const sentTime = isSent ? new Date(activePush.started_at).toLocaleTimeString() : '';
                             
@@ -1749,13 +1756,17 @@
                 if (response.ok) {
                     // Track this active push
                     const quiz = quizzes.find(q => String(q.id) === String(quizId));
-                    activePushes.set(String(quizId), {
+                    const pushedMeta = {
                         push_id: data.push.id,
                         quiz_id: String(quizId),
                         course_id: selectedCourseId,
                         started_at: new Date().toISOString(),
                         title: quiz ? quiz.title : 'Unknown'
-                    });
+                    };
+                    const mapKey = String(quizId || '').trim();
+                    if (mapKey) {
+                        activePushesByQuiz.set(mapKey, pushedMeta);
+                    }
                     
                     // Re-render to show sent badge
                     renderQuizzes();
@@ -1775,9 +1786,17 @@
         // Undo quiz push by quiz ID
         async function undoPushByQuizId(quizId, pushId = '') {
             try {
-                const activePush = activePushes.get(String(quizId));
+                const normalizedQuizId = (quizId && typeof quizId === 'string') ? quizId.trim() : String(quizId || '').trim();
+                const quizKey = normalizedQuizId || String(quizId || '').trim();
+                const activePush = activePushesByQuiz.get(quizKey);
                 const candidatePushId = pushId && pushId.trim() ? pushId.trim() : '';
-                const identifier = candidatePushId || (activePush ? (activePush.push_id || activePush.id || '') : '') || quizId;
+                const fallbackIdentifier = candidatePushId || (activePush ? (activePush.push_id || activePush.id || '') : '');
+                const identifier = normalizedQuizId || fallbackIdentifier;
+
+                if (!identifier) {
+                    showNotification('Unable to determine which push to undo', 'error');
+                    return;
+                }
 
                 const response = await fetch(`/api/pushes/${encodeURIComponent(identifier)}/undo`, {
                     method: 'POST',
@@ -1790,8 +1809,8 @@
                 
                 if (response.ok) {
                     // Remove from active pushes
-                    activePushes.delete(String(quizId));
-                    const resolvedPushId = candidatePushId || (activePush ? (activePush.push_id || activePush.id || '') : '');
+                    activePushesByQuiz.delete(quizKey);
+                    const resolvedPushId = activePush ? (activePush.push_id || activePush.id || '') : fallbackIdentifier;
                     if (resolvedPushId) {
                         activeResponses.delete(resolvedPushId);
                     }

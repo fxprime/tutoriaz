@@ -288,7 +288,10 @@ function processNextInQueue() {
         };
 
         activePushes.set(push.id, activeMeta);
-        activePushesByQuiz.set(push.quiz_id, activeMeta);
+        const quizKey = push.quiz_id ? String(push.quiz_id).trim() : push.quiz_id;
+        if (quizKey) {
+            activePushesByQuiz.set(quizKey, activeMeta);
+        }
 
         targetStudents.forEach(student => {
             io.to(student.socketId).emit('quiz_push', {
@@ -309,11 +312,9 @@ function processNextInQueue() {
             });
         });
 
-        // Set timeout
-        const timeoutId = setTimeout(() => {
-            handlePushTimeout(push.id);
-        }, push.timeout_seconds * 1000);
-        pushTimeouts.set(push.id, timeoutId);
+        schedulePushTimeoutCheck(push.id).catch((error) => {
+            console.error('schedulePushTimeoutCheck error:', error);
+        });
 
         // Notify teachers about the push
         const teachers = Array.from(connectedUsers.values())
@@ -393,15 +394,14 @@ async function removeFromStudentQueue(userId, pushId, status = 'answered') {
 }
 
 // Queue snapshot helpers
-function computeRemainingSeconds(timeoutSeconds, firstViewedAt) {
-    const total = Number(timeoutSeconds) || 60;
-    if (!firstViewedAt) {
-        return total;
+function parseTimestampToMs(value) {
+    if (!value) {
+        return null;
     }
 
-    let parsed = firstViewedAt.trim();
+    let parsed = String(value).trim();
     if (!parsed) {
-        return total;
+        return null;
     }
 
     if (!parsed.includes('T')) {
@@ -411,17 +411,35 @@ function computeRemainingSeconds(timeoutSeconds, firstViewedAt) {
         parsed = `${parsed}Z`;
     }
 
-    const viewedMs = Date.parse(parsed);
-    if (Number.isNaN(viewedMs)) {
-        return total;
+    const timestamp = Date.parse(parsed);
+    if (Number.isNaN(timestamp)) {
+        return null;
+    }
+    return timestamp;
+}
+
+function computeRemainingMilliseconds(timeoutSeconds, firstViewedAt) {
+    const totalMs = (Number(timeoutSeconds) || 60) * 1000;
+    if (!firstViewedAt) {
+        return totalMs;
     }
 
-    const elapsed = Math.floor((Date.now() - viewedMs) / 1000);
-    const remaining = total - elapsed;
-    if (!Number.isFinite(remaining)) {
-        return total;
+    const viewedMs = parseTimestampToMs(firstViewedAt);
+    if (viewedMs === null) {
+        return totalMs;
     }
-    return Math.max(0, remaining);
+
+    const elapsed = Date.now() - viewedMs;
+    const remaining = totalMs - elapsed;
+    if (!Number.isFinite(remaining)) {
+        return totalMs;
+    }
+    return Math.max(0, Math.floor(remaining));
+}
+
+function computeRemainingSeconds(timeoutSeconds, firstViewedAt) {
+    const remainingMs = computeRemainingMilliseconds(timeoutSeconds, firstViewedAt);
+    return Math.floor(remainingMs / 1000);
 }
 
 function mapQueueRow(row) {
@@ -439,7 +457,7 @@ function mapQueueRow(row) {
         options = [];
     }
 
-    const timeout = row.quiz_timeout || 60;
+    const timeout = row.push_timeout || row.quiz_timeout || 60;
 
     return {
         queue_id: row.id,
@@ -461,6 +479,86 @@ function mapQueueRow(row) {
     };
 }
 
+async function getViewingQueueEntriesForPush(pushId) {
+    return new Promise((resolve, reject) => {
+        if (!pushId) {
+            resolve([]);
+            return;
+        }
+
+        const query = `
+            SELECT 
+                sqq.*, 
+                q.timeout_seconds AS quiz_timeout,
+                qp.timeout_seconds AS push_timeout
+            FROM student_quiz_queue sqq
+            JOIN quizzes q ON sqq.quiz_id = q.id
+            LEFT JOIN quiz_pushes qp ON sqq.push_id = qp.id
+            WHERE sqq.push_id = ? AND sqq.status = 'viewing'
+        `;
+
+        db.all(query, [pushId], (err, rows) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(rows || []);
+            }
+        });
+    });
+}
+
+async function getQueueEntryForStudent(pushId, userId) {
+    return new Promise((resolve, reject) => {
+        if (!pushId || !userId) {
+            resolve(null);
+            return;
+        }
+
+        const query = `
+            SELECT 
+                sqq.*, 
+                q.timeout_seconds AS quiz_timeout,
+                qp.timeout_seconds AS push_timeout
+            FROM student_quiz_queue sqq
+            JOIN quizzes q ON sqq.quiz_id = q.id
+            LEFT JOIN quiz_pushes qp ON sqq.push_id = qp.id
+            WHERE sqq.push_id = ? AND sqq.user_id = ?
+            LIMIT 1
+        `;
+
+        db.get(query, [pushId, userId], (err, row) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(row || null);
+            }
+        });
+    });
+}
+
+async function countActiveQueueEntriesForPush(pushId) {
+    return new Promise((resolve, reject) => {
+        if (!pushId) {
+            resolve(0);
+            return;
+        }
+
+        const query = `
+            SELECT COUNT(*) AS count
+            FROM student_quiz_queue
+            WHERE push_id = ? AND status IN ('pending', 'viewing')
+        `;
+
+        db.get(query, [pushId], (err, row) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(Number(row && row.count ? row.count : 0));
+            }
+        });
+    });
+}
+
 async function getCurrentQuizForStudent(userId, courseId = null) {
     return new Promise((resolve, reject) => {
         const query = `
@@ -471,9 +569,11 @@ async function getCurrentQuizForStudent(userId, courseId = null) {
                 q.images AS quiz_images, 
                 q.question_type, 
                 q.options AS quiz_options,
-                q.timeout_seconds AS quiz_timeout
+                q.timeout_seconds AS quiz_timeout,
+                qp.timeout_seconds AS push_timeout
             FROM student_quiz_queue sqq
             JOIN quizzes q ON sqq.quiz_id = q.id
+            LEFT JOIN quiz_pushes qp ON sqq.push_id = qp.id
             WHERE sqq.user_id = ?${courseId ? ' AND sqq.course_id = ?' : ''} AND sqq.status = 'viewing'
             ORDER BY sqq.first_viewed_at ASC, sqq.added_at ASC
             LIMIT 1
@@ -491,6 +591,11 @@ async function getCurrentQuizForStudent(userId, courseId = null) {
                         mapped.timeout_seconds,
                         mapped.first_viewed_at
                     );
+                    if (mapped.push_id) {
+                        schedulePushTimeoutCheck(mapped.push_id).catch((error) => {
+                            console.error('schedulePushTimeoutCheck error:', error);
+                        });
+                    }
                 }
                 resolve(mapped);
             }
@@ -508,9 +613,11 @@ async function getPendingQuizzesForStudent(userId, courseId = null) {
                 q.images AS quiz_images, 
                 q.question_type, 
                 q.options AS quiz_options,
-                q.timeout_seconds AS quiz_timeout
+                q.timeout_seconds AS quiz_timeout,
+                qp.timeout_seconds AS push_timeout
             FROM student_quiz_queue sqq
             JOIN quizzes q ON sqq.quiz_id = q.id
+            LEFT JOIN quiz_pushes qp ON sqq.push_id = qp.id
             WHERE sqq.user_id = ?${courseId ? ' AND sqq.course_id = ?' : ''} AND sqq.status = 'pending'
             ORDER BY sqq.added_at ASC
         `;
@@ -565,7 +672,14 @@ async function promoteNextPendingToViewing(userId, courseId = null) {
                         reject(updateErr);
                     } else {
                         getCurrentQuizForStudent(userId, courseId)
-                            .then(resolve)
+                            .then((result) => {
+                                if (result && result.push_id) {
+                                    schedulePushTimeoutCheck(result.push_id).catch((error) => {
+                                        console.error('schedulePushTimeoutCheck error:', error);
+                                    });
+                                }
+                                resolve(result);
+                            })
                             .catch(reject);
                     }
                 }
@@ -713,10 +827,12 @@ async function checkQuizAlreadyAnswered(userId, quizId) {
     return new Promise((resolve, reject) => {
         const query = `
             SELECT COUNT(*) as count 
-            FROM quiz_responses 
-            WHERE user_id = ? AND quiz_id = ? AND status = 'answered'
+            FROM quiz_responses qr
+            LEFT JOIN quiz_pushes qp ON qr.push_id = qp.id
+            WHERE qr.user_id = ? AND qr.quiz_id = ? AND qr.status = 'answered'
+              AND (qp.undone_at IS NULL OR qp.undone_at = '')
         `;
-        
+
         db.get(query, [userId, quizId], (err, row) => {
             if (err) {
                 reject(err);
@@ -2351,30 +2467,41 @@ app.get('/api/my-quiz-history', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Student access required' });
         }
 
+        // Get both queue entries AND responses to show complete history
         const query = `
             SELECT 
-                sqq.id,
-                sqq.push_id,
-                sqq.quiz_id,
+                COALESCE(sqq.id, qr.id) as id,
+                COALESCE(sqq.push_id, qr.push_id) as push_id,
+                COALESCE(sqq.quiz_id, qr.quiz_id) as quiz_id,
                 sqq.added_at,
                 sqq.first_viewed_at,
-                sqq.status,
+                COALESCE(sqq.status, qr.status) as status,
                 q.title,
                 q.question_type,
                 q.timeout_seconds,
                 qp.pushed_at,
                 qp.undone_at,
                 qr.answered_at,
-                qr.answer_text
-            FROM student_quiz_queue sqq
-            LEFT JOIN quizzes q ON sqq.quiz_id = q.id
-            LEFT JOIN quiz_pushes qp ON sqq.push_id = qp.id
-            LEFT JOIN quiz_responses qr ON sqq.push_id = qr.push_id AND sqq.user_id = qr.user_id
-            WHERE sqq.user_id = ?
-            ORDER BY sqq.added_at DESC
+                qr.answer_text,
+                CASE 
+                    WHEN sqq.id IS NOT NULL THEN sqq.added_at
+                    WHEN qr.answered_at IS NOT NULL THEN qr.answered_at
+                    ELSE qp.pushed_at
+                END as sort_time
+            FROM (
+                SELECT DISTINCT push_id, quiz_id, user_id FROM student_quiz_queue WHERE user_id = ?
+                UNION
+                SELECT DISTINCT push_id, quiz_id, user_id FROM quiz_responses WHERE user_id = ?
+            ) combined
+            LEFT JOIN student_quiz_queue sqq ON combined.push_id = sqq.push_id AND combined.user_id = sqq.user_id
+            LEFT JOIN quiz_responses qr ON combined.push_id = qr.push_id AND combined.user_id = qr.user_id
+            LEFT JOIN quizzes q ON combined.quiz_id = q.id
+            LEFT JOIN quiz_pushes qp ON combined.push_id = qp.id
+            WHERE combined.user_id = ?
+            ORDER BY sort_time DESC
         `;
 
-        db.all(query, [req.user.userId], (err, rows) => {
+        db.all(query, [req.user.userId, req.user.userId, req.user.userId], (err, rows) => {
             if (err) {
                 console.error('Get quiz history error:', err);
                 return res.status(500).json({ error: 'Internal server error' });
@@ -2417,39 +2544,91 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
             return res.status(403).json({ error: 'Student access required' });
         }
 
-        // Delete quiz queue entries where the quiz no longer exists
-        const query = `
-            DELETE FROM student_quiz_queue 
-            WHERE user_id = ? 
-            AND quiz_id NOT IN (SELECT id FROM quizzes)
-        `;
+        const { all } = req.body; // If all=true, delete everything; otherwise only orphaned
+        let totalRemoved = 0;
 
-        db.run(query, [req.user.userId], function(err) {
-            if (err) {
-                console.error('Cleanup orphaned quizzes error:', err);
-                return res.status(500).json({ error: 'Internal server error' });
-            }
+        if (all) {
+            // Delete ALL quiz queue entries for this student
+            const queueRemoved = await new Promise((resolve, reject) => {
+                db.run(
+                    `DELETE FROM student_quiz_queue WHERE user_id = ?`,
+                    [req.user.userId],
+                    function(err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.changes);
+                        }
+                    }
+                );
+            });
 
-            const removed = this.changes;
+            totalRemoved += queueRemoved;
 
-            getQueueSnapshot(req.user.userId)
-                .then(snapshot => {
-                    syncStudentQueueCache(req.user.userId, snapshot);
-                    updateOnlineList();
-                    res.json({ 
-                        message: 'Cleanup completed',
-                        removed,
-                        queue: buildQueueUpdatePayload(snapshot)
-                    });
-                })
-                .catch(snapshotError => {
-                    console.error('Cleanup snapshot error:', snapshotError);
-                    updateOnlineList();
-                    res.json({ 
-                        message: 'Cleanup completed',
-                        removed
-                    });
-                });
+            // Delete ALL quiz responses for this student
+            const responsesRemoved = await new Promise((resolve, reject) => {
+                db.run(
+                    `DELETE FROM quiz_responses WHERE user_id = ?`,
+                    [req.user.userId],
+                    function(err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.changes);
+                        }
+                    }
+                );
+            });
+
+            totalRemoved += responsesRemoved;
+        } else {
+            // Delete quiz queue entries where the quiz no longer exists
+            const queueRemoved = await new Promise((resolve, reject) => {
+                db.run(
+                    `DELETE FROM student_quiz_queue 
+                     WHERE user_id = ? 
+                     AND quiz_id NOT IN (SELECT id FROM quizzes)`,
+                    [req.user.userId],
+                    function(err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.changes);
+                        }
+                    }
+                );
+            });
+
+            totalRemoved += queueRemoved;
+
+            // Delete quiz responses where the quiz no longer exists
+            const responsesRemoved = await new Promise((resolve, reject) => {
+                db.run(
+                    `DELETE FROM quiz_responses 
+                     WHERE user_id = ? 
+                     AND quiz_id NOT IN (SELECT id FROM quizzes)`,
+                    [req.user.userId],
+                    function(err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.changes);
+                        }
+                    }
+                );
+            });
+
+            totalRemoved += responsesRemoved;
+        }
+
+        const snapshot = await getQueueSnapshot(req.user.userId);
+        syncStudentQueueCache(req.user.userId, snapshot);
+        updateOnlineList();
+
+        res.json({ 
+            message: 'Cleanup completed',
+            removed: totalRemoved,
+            queue: buildQueueUpdatePayload(snapshot)
         });
     } catch (error) {
         console.error('Cleanup orphaned quizzes error:', error);
@@ -2621,11 +2800,9 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
         activePushes.set(push.id, activeMeta);
         activePushesByQuiz.set(push.quiz_id, activeMeta);
 
-        // Set timeout
-        const timeoutId = setTimeout(() => {
-            handlePushTimeout(push.id);
-        }, push.timeout_seconds * 1000);
-        pushTimeouts.set(push.id, timeoutId);
+        schedulePushTimeoutCheck(push.id).catch((error) => {
+            console.error('schedulePushTimeoutCheck error:', error);
+        });
 
         // Notify teachers about the push
         const teachers = Array.from(connectedUsers.values())
@@ -2662,22 +2839,23 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
     }
 });
 
-function resolveActivePush(identifier) {
-    if (!identifier) {
+async function resolveActivePush(identifier) {
+    const normalized = identifier ? String(identifier).trim() : '';
+    if (!normalized) {
         return null;
     }
 
-    if (activePushes.has(identifier)) {
-        const pushData = activePushes.get(identifier);
+    if (activePushes.has(normalized)) {
+        const pushData = activePushes.get(normalized);
         return {
-            pushId: identifier,
+            pushId: normalized,
             pushData,
             quizId: pushData ? pushData.quiz_id : null
         };
     }
 
-    if (activePushesByQuiz.has(identifier)) {
-        const pushMeta = activePushesByQuiz.get(identifier);
+    if (activePushesByQuiz.has(normalized)) {
+        const pushMeta = activePushesByQuiz.get(normalized);
         if (!pushMeta) {
             return null;
         }
@@ -2695,7 +2873,73 @@ function resolveActivePush(identifier) {
         };
     }
 
-    return null;
+    try {
+        const pushRow = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT * FROM quiz_pushes
+                 WHERE id = ?
+                   AND (undone_at IS NULL OR undone_at = '')
+                 LIMIT 1`,
+                [normalized],
+                (err, row) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row || null);
+                    }
+                }
+            );
+        });
+
+        let rowToUse = pushRow;
+
+        if (!rowToUse) {
+            rowToUse = await new Promise((resolve, reject) => {
+                db.get(
+                    `SELECT * FROM quiz_pushes
+                     WHERE quiz_id = ?
+                       AND (undone_at IS NULL OR undone_at = '')
+                     ORDER BY pushed_at DESC
+                     LIMIT 1`,
+                    [normalized],
+                    (err, row) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(row || null);
+                        }
+                    }
+                );
+            });
+        }
+
+        if (!rowToUse) {
+            return null;
+        }
+
+        const fallbackPushId = rowToUse.id;
+        const mapPush = activePushes.get(fallbackPushId) || activePushesByQuiz.get(rowToUse.quiz_id) || null;
+
+        const pushData = mapPush || {
+            id: fallbackPushId,
+            push_id: fallbackPushId,
+            quiz_id: rowToUse.quiz_id,
+            course_id: rowToUse.course_id || null,
+            pushed_at: rowToUse.pushed_at,
+            started_at: rowToUse.pushed_at,
+            timeout_seconds: rowToUse.timeout_seconds,
+            targetUsers: []
+        };
+
+        return {
+            pushId: fallbackPushId,
+            pushData,
+            quizId: pushData.quiz_id || rowToUse.quiz_id
+        };
+    } catch (lookupError) {
+        console.error('resolveActivePush lookup error:', lookupError);
+        return null;
+    }
 }
 
 // Undo push (teacher only)
@@ -2706,7 +2950,7 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
         }
 
         const { identifier } = req.params;
-        const resolvedPush = resolveActivePush(identifier);
+        const resolvedPush = await resolveActivePush(identifier);
 
         if (!resolvedPush) {
             return res.status(404).json({ error: 'Push not found or already completed' });
@@ -2725,55 +2969,125 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
         // Mark as undone in database
         db.run('UPDATE quiz_pushes SET undone_at = CURRENT_TIMESTAMP WHERE id = ?', [pushId]);
 
-        // Remove this specific push from all student queues in database
-        await new Promise((resolve, reject) => {
-            db.run('DELETE FROM student_quiz_queue WHERE push_id = ?', [pushId], (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
-
-        // IMPORTANT: Also delete all responses for this quiz_id
-        // This allows students to re-answer if teacher pushes again
+        // Remove ALL queue entries for this quiz (not just this push) from all students
         if (targetQuizId) {
             await new Promise((resolve, reject) => {
-                db.run('DELETE FROM quiz_responses WHERE quiz_id = ? AND push_id = ?', [targetQuizId, pushId], (err) => {
-                    if (err) {
-                        console.error('Error deleting responses:', err);
-                        reject(err);
-                    } else {
-                        console.log(`Deleted responses for quiz_id=${targetQuizId}, push_id=${pushId}`);
-                        resolve();
-                    }
+                db.run('DELETE FROM student_quiz_queue WHERE quiz_id = ?', [targetQuizId], (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        } else {
+            // Fallback: remove by push_id if quiz_id unavailable
+            await new Promise((resolve, reject) => {
+                db.run('DELETE FROM student_quiz_queue WHERE push_id = ?', [pushId], (err) => {
+                    if (err) reject(err);
+                    else resolve();
                 });
             });
         }
 
-        // Send undo only to students who received this specific push
+        // Mark prior responses for this quiz as ignored so students can re-answer
+        if (targetQuizId) {
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `UPDATE quiz_responses 
+                     SET status = 'ignored' 
+                     WHERE quiz_id = ? AND status != 'ignored'`,
+                    [targetQuizId],
+                    (err) => {
+                        if (err) {
+                            console.error('Error marking responses ignored:', err);
+                            reject(err);
+                        } else {
+                            resolve();
+                        }
+                    }
+                );
+            });
+        }
+
+        // Send undo only to students who received this quiz
         console.log('=== UNDO DEBUG ===');
         console.log('Identifier:', identifier);
         console.log('Resolved Push ID:', pushId);
         console.log('Quiz ID:', targetQuizId);
         console.log('Push data exists:', !!pushData);
         
-        const targetUsers = (pushData && Array.isArray(pushData.targetUsers)) ? pushData.targetUsers : [];
+        // Gather ALL students who have this quiz in their queue or responses (not just this push)
+        let targetUsers = (pushData && Array.isArray(pushData.targetUsers)) ? pushData.targetUsers : [];
+        
+        if (targetQuizId) {
+            try {
+                // Get all students who have ANY queue entry or response for this quiz
+                const allAffectedRows = await new Promise((resolve, reject) => {
+                    db.all(
+                        `SELECT DISTINCT user_id FROM (
+                            SELECT user_id FROM student_quiz_queue WHERE quiz_id = ?
+                            UNION
+                            SELECT user_id FROM quiz_responses WHERE quiz_id = ?
+                        )`,
+                        [targetQuizId, targetQuizId],
+                        (err, rows) => {
+                            if (err) {
+                                reject(err);
+                            } else {
+                                resolve(rows || []);
+                            }
+                        }
+                    );
+                });
+
+                const affectedUserIds = allAffectedRows.map(row => row.user_id).filter(Boolean);
+                
+                // Merge with in-memory targets
+                const allUsers = new Set([...targetUsers, ...affectedUserIds]);
+                targetUsers = Array.from(allUsers);
+            } catch (lookupError) {
+                console.error('Error loading all affected users for undo:', lookupError);
+            }
+        }
+        
+        if ((!Array.isArray(targetUsers) || targetUsers.length === 0) && pushId) {
+            try {
+                const responseUserRows = await new Promise((resolve, reject) => {
+                    db.all(
+                        `SELECT DISTINCT user_id FROM quiz_responses WHERE push_id = ?`,
+                        [pushId],
+                        (err, rows) => {
+                            if (err) {
+                                reject(err);
+                            } else {
+                                resolve(rows || []);
+                            }
+                        }
+                    );
+                });
+
+                targetUsers = responseUserRows.map(row => row.user_id).filter(Boolean);
+            } catch (responseLookupError) {
+                console.error('Error loading response participants for undo:', responseLookupError);
+                targetUsers = Array.isArray(targetUsers) ? targetUsers : [];
+            }
+        }
+        const teachers = Array.from(connectedUsers.values())
+            .filter(user => user.role === 'teacher');
+
+        console.log('Total target users for undo:', targetUsers.length);
 
         if (targetUsers.length > 0) {
             const connectedTargets = Array.from(connectedUsers.values())
                 .filter(user => user.role === 'student' && targetUsers.includes(user.userId));
 
-            console.log('Target users for this push:', targetUsers);
             console.log('Connected targets found:', connectedTargets.length);
             
             for (const student of connectedTargets) {
                 console.log(`Processing undo for student: ${student.username} (${student.socketId})`);
                 
-                // Remove from in-memory queue
-                await removeFromStudentQueue(student.userId, pushId, 'removed');
-                
                 // Send undo event to close dialog if they're viewing this quiz
                 io.to(student.socketId).emit('quiz_undo', {
                     push_id: pushId,
+                    quiz_id: targetQuizId,
                     course_id: pushCourseId || student.activeCourseId || null
                 });
                 
@@ -2790,21 +3104,34 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
                         course_id: pushCourseId || student.activeCourseId || null
                     });
                 }
+
+                const studentDisplayName = student.display_name || student.username;
+                teachers.forEach(teacher => {
+                    io.to(teacher.socketId).emit('quiz_response', {
+                        push_id: pushId,
+                        quiz_id: targetQuizId,
+                        user_id: student.userId,
+                        username: student.username,
+                        display_name: studentDisplayName,
+                        displayName: studentDisplayName,
+                        status: 'ignored',
+                        elapsed_ms: null,
+                        answered_at: new Date().toISOString(),
+                        course_id: pushCourseId || null
+                    });
+                });
             }
         }
 
         // Notify teachers
-        const teachers = Array.from(connectedUsers.values())
-            .filter(user => user.role === 'teacher');
-        
         teachers.forEach(teacher => {
             io.to(teacher.socketId).emit('push_undone', { push_id: pushId, quiz_id: targetQuizId, course_id: pushCourseId });
         });
 
         if (targetQuizId) {
-            activePushesByQuiz.delete(targetQuizId);
+            activePushesByQuiz.delete(String(targetQuizId).trim());
         } else if (identifier) {
-            activePushesByQuiz.delete(identifier);
+            activePushesByQuiz.delete(String(identifier).trim());
         }
 
         activePushes.delete(pushId);
@@ -2860,11 +3187,91 @@ app.get('/api/check-response/:pushId', authenticateToken, (req, res) => {
         });
 });
 
-// Handle push timeout
-const handlePushTimeout = async (pushId) => {
-    if (!activePushes.has(pushId)) return;
+// Handle push timeouts using per-student first view timestamps
+async function finalizePushIfComplete(pushId, pushMeta) {
+    let remaining = 0;
+    try {
+        remaining = await countActiveQueueEntriesForPush(pushId);
+    } catch (error) {
+        console.error('Error counting remaining quiz queue entries:', error);
+        return false;
+    }
+
+    if (remaining > 0) {
+        return false;
+    }
+
+    if (pushMeta && pushMeta.quiz_id) {
+        const quizKey = String(pushMeta.quiz_id).trim();
+        activePushesByQuiz.delete(quizKey);
+    }
+    activePushes.delete(pushId);
+    pushTimeouts.delete(pushId);
+
+    if (pushMeta && currentActiveQuiz === pushMeta.quiz_id) {
+        currentActiveQuiz = null;
+        setTimeout(() => processNextInQueue(), 100);
+    }
+
+    return true;
+}
+
+async function handlePushTimeout(pushId) {
+    if (!pushId) {
+        return;
+    }
+
+    if (pushTimeouts.has(pushId)) {
+        clearTimeout(pushTimeouts.get(pushId));
+        pushTimeouts.delete(pushId);
+    }
+
+    if (!activePushes.has(pushId)) {
+        return;
+    }
 
     const push = activePushes.get(pushId);
+
+    let viewingRows;
+    try {
+        viewingRows = await getViewingQueueEntriesForPush(pushId);
+    } catch (error) {
+        console.error('Error loading viewing queue entries for timeout:', error);
+        return;
+    }
+
+    if (!Array.isArray(viewingRows) || viewingRows.length === 0) {
+        const completedNoRows = await finalizePushIfComplete(pushId, push);
+        if (completedNoRows) {
+            updateOnlineList();
+        }
+        return;
+    }
+
+    const now = Date.now();
+    const dueEntries = [];
+
+    for (const row of viewingRows) {
+        const firstViewedMs = parseTimestampToMs(row.first_viewed_at);
+        if (firstViewedMs === null) {
+            continue;
+        }
+
+        const timeoutSeconds = Number(push.timeout_seconds) || Number(row.push_timeout) || Number(row.quiz_timeout) || 60;
+        const expiresAt = firstViewedMs + timeoutSeconds * 1000;
+        if (!Number.isFinite(expiresAt)) {
+            continue;
+        }
+
+        if (expiresAt <= now) {
+            dueEntries.push({ row, firstViewedMs, timeoutSeconds });
+        }
+    }
+
+    if (dueEntries.length === 0) {
+        await schedulePushTimeoutCheck(pushId);
+        return;
+    }
 
     const teachers = Array.from(connectedUsers.values())
         .filter(user => user.role === 'teacher');
@@ -2873,20 +3280,19 @@ const handlePushTimeout = async (pushId) => {
         .filter(user => user.role === 'student');
     const connectedStudentMap = new Map(connectedStudents.map(student => [student.userId, student]));
 
-    const targetUserIds = Array.isArray(push.targetUsers) && push.targetUsers.length > 0
-        ? push.targetUsers
-        : Array.from(connectedStudentMap.keys());
+    for (const entry of dueEntries) {
+        const { row, firstViewedMs, timeoutSeconds } = entry;
+        const userId = row.user_id;
 
-    for (const userId of targetUserIds) {
         let hasResponse = true;
         try {
             hasResponse = await new Promise((resolve, reject) => {
                 db.get('SELECT id FROM quiz_responses WHERE push_id = ? AND user_id = ?',
-                    [pushId, userId], (err, row) => {
+                    [pushId, userId], (err, responseRow) => {
                         if (err) {
                             reject(err);
                         } else {
-                            resolve(!!row);
+                            resolve(!!responseRow);
                         }
                     });
             });
@@ -2899,11 +3305,8 @@ const handlePushTimeout = async (pushId) => {
             continue;
         }
 
-        const startedAtMs = Date.parse(push.started_at || '');
-        const timeoutMsFallback = (Number(push.timeout_seconds) || 60) * 1000;
-        const elapsedMs = Number.isNaN(startedAtMs)
-            ? timeoutMsFallback
-            : Math.max(timeoutMsFallback, Date.now() - startedAtMs);
+        const elapsedMs = Math.max(timeoutSeconds * 1000, now - firstViewedMs);
+        const startedAtIso = Number.isFinite(firstViewedMs) ? new Date(firstViewedMs).toISOString() : push.started_at;
 
         const timeoutResponse = {
             id: uuidv4(),
@@ -2911,7 +3314,7 @@ const handlePushTimeout = async (pushId) => {
             quiz_id: push.quiz_id,
             user_id: userId,
             answer_text: null,
-            started_at: push.started_at,
+            started_at: startedAtIso,
             answered_at: new Date().toISOString(),
             elapsed_ms: elapsedMs,
             status: 'timeout'
@@ -2928,6 +3331,10 @@ const handlePushTimeout = async (pushId) => {
             await removeFromStudentQueue(userId, pushId, 'removed');
         } catch (error) {
             console.error('Error updating queue status after timeout:', error);
+        }
+
+        if (Array.isArray(push.targetUsers)) {
+            push.targetUsers = push.targetUsers.filter(id => id !== userId);
         }
 
         const studentInfo = connectedStudentMap.get(userId);
@@ -2968,29 +3375,32 @@ const handlePushTimeout = async (pushId) => {
                 display_name: studentDisplayName,
                 displayName: studentDisplayName,
                 status: 'timeout',
-                elapsed_ms: push.timeout_seconds * 1000,
+                elapsed_ms: elapsedMs,
                 answered_at: timeoutResponse.answered_at,
                 course_id: push.course_id || null
             };
         } else {
             try {
                 teacherPayload = await new Promise((resolve, reject) => {
-                    db.get('SELECT id, username, display_name FROM users WHERE id = ?', [userId], (err, row) => {
+                    db.get('SELECT id, username, display_name FROM users WHERE id = ?', [userId], (err, userRow) => {
                         if (err) {
                             reject(err);
+                        } else if (!userRow) {
+                            resolve(null);
                         } else {
-                            resolve(row ? {
+                            const displayName = userRow.display_name || userRow.username;
+                            resolve({
                                 push_id: pushId,
                                 quiz_id: push.quiz_id,
-                                user_id: row.id,
-                                username: row.username,
-                                display_name: row.display_name || row.username,
-                                displayName: row.display_name || row.username,
+                                user_id: userRow.id,
+                                username: userRow.username,
+                                display_name: displayName,
+                                displayName: displayName,
                                 status: 'timeout',
-                                elapsed_ms: push.timeout_seconds * 1000,
+                                elapsed_ms: elapsedMs,
                                 answered_at: timeoutResponse.answered_at,
                                 course_id: push.course_id || null
-                            } : null);
+                            });
                         }
                     });
                 });
@@ -3000,7 +3410,6 @@ const handlePushTimeout = async (pushId) => {
         }
 
         if (teacherPayload) {
-            teacherPayload.elapsed_ms = elapsedMs;
             teachers.forEach(teacher => {
                 io.to(teacher.socketId).emit('quiz_response', teacherPayload);
             });
@@ -3024,32 +3433,80 @@ const handlePushTimeout = async (pushId) => {
         }
     }
 
-    db.run(
-        `UPDATE student_quiz_queue 
-         SET status = 'removed'
-         WHERE push_id = ? AND status IN ('pending', 'viewing')`,
-        [pushId],
-        (err) => {
-            if (err) {
-                console.error('Error cleaning student quiz queue after timeout:', err);
-            }
-        }
-    );
-
-    if (push && push.quiz_id) {
-        activePushesByQuiz.delete(push.quiz_id);
-    }
-
-    activePushes.delete(pushId);
-    pushTimeouts.delete(pushId);
-
-    if (push && currentActiveQuiz === push.quiz_id) {
-        currentActiveQuiz = null;
-        setTimeout(() => processNextInQueue(), 100);
+    const completed = await finalizePushIfComplete(pushId, push);
+    if (!completed) {
+        await schedulePushTimeoutCheck(pushId);
     }
 
     updateOnlineList();
-};
+}
+
+async function schedulePushTimeoutCheck(pushId) {
+    if (!pushId) {
+        return;
+    }
+
+    if (pushTimeouts.has(pushId)) {
+        clearTimeout(pushTimeouts.get(pushId));
+        pushTimeouts.delete(pushId);
+    }
+
+    if (!activePushes.has(pushId)) {
+        return;
+    }
+
+    let viewingRows;
+    try {
+        viewingRows = await getViewingQueueEntriesForPush(pushId);
+    } catch (error) {
+        console.error('Error scheduling push timeout:', error);
+        return;
+    }
+
+    if (!Array.isArray(viewingRows) || viewingRows.length === 0) {
+        return;
+    }
+
+    const push = activePushes.get(pushId);
+    const now = Date.now();
+    let nextDelay = null;
+
+    for (const row of viewingRows) {
+        const firstViewedMs = parseTimestampToMs(row.first_viewed_at);
+        if (firstViewedMs === null) {
+            continue;
+        }
+
+        const timeoutSeconds = Number(push.timeout_seconds) || Number(row.push_timeout) || Number(row.quiz_timeout) || 60;
+        const expiresAt = firstViewedMs + timeoutSeconds * 1000;
+        if (!Number.isFinite(expiresAt)) {
+            continue;
+        }
+
+        const remaining = expiresAt - now;
+        if (remaining <= 0) {
+            nextDelay = 0;
+            break;
+        }
+
+        if (nextDelay === null || remaining < nextDelay) {
+            nextDelay = remaining;
+        }
+    }
+
+    if (nextDelay === null) {
+        return;
+    }
+
+    const delay = Math.max(0, Math.floor(nextDelay));
+    const timeoutId = setTimeout(() => {
+        handlePushTimeout(pushId).catch((error) => {
+            console.error('handlePushTimeout error:', error);
+        });
+    }, delay);
+
+    pushTimeouts.set(pushId, timeoutId);
+}
 
 // WebSocket handling
 io.on('connection', (socket) => {
@@ -3371,9 +3828,30 @@ io.on('connection', (socket) => {
                     }
 
                     const push = activePushes.get(push_id);
-                    const startTime = new Date(push.started_at);
-                    const endTime = new Date(answered_at);
-                    const elapsedMs = endTime - startTime;
+
+                    let queueRow = null;
+                    try {
+                        queueRow = await getQueueEntryForStudent(push_id, user.userId);
+                    } catch (lookupError) {
+                        console.error('Error loading queue entry for answer:', lookupError);
+                    }
+
+                    const providedAnsweredAt = (typeof answered_at === 'string' && answered_at.trim()) ? answered_at : null;
+                    let answeredMs = providedAnsweredAt ? Date.parse(providedAnsweredAt) : Date.now();
+                    if (Number.isNaN(answeredMs)) {
+                        answeredMs = Date.now();
+                    }
+                    const normalizedAnsweredAt = new Date(answeredMs).toISOString();
+
+                    const firstViewedMs = queueRow ? parseTimestampToMs(queueRow.first_viewed_at) : null;
+                    let startMs = firstViewedMs;
+                    if (startMs === null) {
+                        const pushStartMs = parseTimestampToMs(push.started_at);
+                        startMs = pushStartMs !== null ? pushStartMs : answeredMs;
+                    }
+
+                    const elapsedMs = Math.max(0, answeredMs - startMs);
+                    const startedAtIso = new Date(startMs).toISOString();
 
                     const serializedAnswer = (typeof answer === 'string' || typeof answer === 'number')
                         ? String(answer)
@@ -3385,8 +3863,8 @@ io.on('connection', (socket) => {
                         quiz_id: push.quiz_id,
                         user_id: user.userId,
                         answer_text: serializedAnswer,
-                        started_at: push.started_at,
-                        answered_at,
+                        started_at: startedAtIso,
+                        answered_at: normalizedAnsweredAt,
                         elapsed_ms: elapsedMs,
                         status: 'answered'
                     };
@@ -3396,6 +3874,18 @@ io.on('connection', (socket) => {
 
                         // Remove from student's queue
                         await removeFromStudentQueue(user.userId, push_id);
+
+                        if (Array.isArray(push.targetUsers)) {
+                            push.targetUsers = push.targetUsers.filter(id => id !== user.userId);
+                        }
+
+                        const pushMeta = activePushes.get(push_id);
+                        const completed = await finalizePushIfComplete(push_id, pushMeta || push);
+                        if (!completed) {
+                            schedulePushTimeoutCheck(push_id).catch((error) => {
+                                console.error('schedulePushTimeoutCheck error:', error);
+                            });
+                        }
 
                         socket.emit('answer_submitted', { 
                             push_id, 
@@ -3435,7 +3925,7 @@ io.on('connection', (socket) => {
                                 displayName: studentDisplayName,
                                 answer,
                                 elapsed_ms: elapsedMs,
-                                answered_at,
+                                answered_at: normalizedAnsweredAt,
                                 status: 'answered',
                                 course_id: push.course_id || null
                             });

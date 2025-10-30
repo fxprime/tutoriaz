@@ -1890,16 +1890,27 @@
                     return;
                 }
 
-                console.log('Quiz undo received for push_id:', data.push_id);
-                console.log('Current quiz push_id:', currentQuiz ? currentQuiz.push_id : 'none');
+                console.log('Quiz undo received for quiz_id:', data.quiz_id);
+                console.log('Current quiz quiz_id:', currentQuiz ? currentQuiz.quiz_id : 'none');
 
                 // Remove from local snapshot until server resend
-                if (queueSnapshot.currentQuiz && queueSnapshot.currentQuiz.push_id === data.push_id) {
+                const undoQuizId = (data.quiz_id && typeof data.quiz_id === 'string') ? data.quiz_id : null;
+                const undoPushId = (data.push_id && typeof data.push_id === 'string') ? data.push_id : null;
+
+                if (undoQuizId && queueSnapshot.currentQuiz && queueSnapshot.currentQuiz.quiz_id === undoQuizId) {
                     queueSnapshot.currentQuiz = null;
                 }
                 queueSnapshot.pending = queueSnapshot.pending
                     .filter(item => matchesActiveCourse(item.course_id, { allowMissing: true }))
-                    .filter(item => item.push_id !== data.push_id);
+                    .filter(item => {
+                        if (undoQuizId && item.quiz_id) {
+                            return item.quiz_id !== undoQuizId;
+                        }
+                        if (undoPushId && item.push_id) {
+                            return item.push_id !== undoPushId;
+                        }
+                        return true;
+                    });
                 queueSnapshot.total = (queueSnapshot.currentQuiz ? 1 : 0) + queueSnapshot.pending.length;
                 updateDebugQueue();
                 refreshDebugHistory();
@@ -1912,13 +1923,18 @@
                     lastUndoEl.style.cssText = `position: fixed; top: 10px; right: 10px; z-index: 10000; background: #ff6b6b; color: white; padding: 8px 12px; border-radius: 4px; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.3);`;
                     document.body.appendChild(lastUndoEl);
                 }
-                lastUndoEl.textContent = `UNDO: ${data.push_id.substring(0, 8)}...`;
+                const label = undoQuizId
+                    ? `Quiz ${undoQuizId.substring(0, 8)}...`
+                    : (undoPushId ? `Push ${undoPushId.substring(0, 8)}...` : 'UNDO received');
+
+                lastUndoEl.textContent = `UNDO: ${label}`;
                 lastUndoEl.style.display = 'block';
                 setTimeout(() => { lastUndoEl.style.display = 'none'; }, 3000);
 
                 // Only hide quiz if the undo matches the currently displayed quiz's push_id
-                if (currentQuiz && currentQuiz.push_id === data.push_id) {
-                    console.log('✓ Match! Hiding quiz with push_id:', data.push_id);
+                if ((undoQuizId && currentQuiz && currentQuiz.quiz_id === undoQuizId) ||
+                    (!undoQuizId && undoPushId && currentQuiz && currentQuiz.push_id === undoPushId)) {
+                    console.log('✓ Match! Hiding quiz with quiz_id:', undoQuizId || currentQuiz.quiz_id);
                     try {
                         hideQuiz();
                         showNotification('Quiz was cancelled by teacher', 'info');
@@ -2547,17 +2563,17 @@
 
         // Cleanup orphaned quizzes
         async function cleanupOrphanedQuizzes() {
-            if (!confirm('Remove all orphaned quiz records (quizzes that have been deleted by teacher)?\n\nThis cannot be undone.')) {
-                return;
-            }
-
+            const cleanupAll = confirm('Choose cleanup option:\n\nOK = Remove ALL quiz history\nCancel = Remove only orphaned records (deleted quizzes)');
+            
             try {
                 const token = localStorage.getItem('token');
                 const response = await fetch('/api/cleanup-orphaned-quizzes', {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ all: cleanupAll })
                 });
 
                 if (!response.ok) {
@@ -2565,7 +2581,8 @@
                 }
 
                 const data = await response.json();
-                showNotification(`Cleanup completed: ${data.removed} record(s) removed`, 'success');
+                const cleanupType = cleanupAll ? 'ALL history' : 'orphaned records';
+                showNotification(`Cleanup completed: ${data.removed} ${cleanupType} removed`, 'success');
 
                 if (data.queue) {
                     queueSnapshot = {
