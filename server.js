@@ -19,6 +19,36 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const BASE_URL = process.env.BASE_URL || `http://${HOST}:${PORT}`;
 const DB_PATH = path.join(__dirname, 'database.sqlite');
 
+// Application version and build info
+let APP_VERSION = '0.0.0';
+let APP_BUILD_DATE = null; // ISO string
+try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    if (pkg && pkg.version) {
+        APP_VERSION = pkg.version;
+    }
+} catch (e) {
+    console.warn('Could not read package.json for version:', e.message);
+}
+
+// Try to read last git commit date (ISO) if available
+try {
+    const { execSync } = require('child_process');
+    const gitDate = execSync('git log -1 --format=%cI', { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] })
+        .toString().trim();
+    if (gitDate) {
+        APP_BUILD_DATE = gitDate; // ISO 8601
+    }
+} catch (e) {
+    // fallback: file mtime of package.json
+    try {
+        const stats = fs.statSync(path.join(__dirname, 'package.json'));
+        APP_BUILD_DATE = stats.mtime.toISOString();
+    } catch (e2) {
+        APP_BUILD_DATE = null;
+    }
+}
+
 // Database connection
 const db = new sqlite3.Database(DB_PATH);
 
@@ -1756,7 +1786,9 @@ app.delete('/api/courses/:courseId', authenticateToken, async (req, res) => {
 app.get('/api/config', (req, res) => {
     res.json({
         baseUrl: BASE_URL,
-        environment: process.env.NODE_ENV || 'development'
+        environment: process.env.NODE_ENV || 'development',
+        version: APP_VERSION ? `v${APP_VERSION}` : null,
+        buildDate: APP_BUILD_DATE || null
     });
 });
 

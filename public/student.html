@@ -682,7 +682,10 @@
 </head>
 <body>
     <div class="header">
-        <h1>ESP32 Course Platform</h1>
+        <div>
+            <h1>ESP32 Course Platform</h1>
+            <small style="color: #aaa; font-size: 11px; display: block; margin-top: -8px;">v1.0.0 • <span id="buildInfo">Loading...</span></small>
+        </div>
         <div class="user-info">
             <span id="studentName">Student</span>
             <div class="status-indicator" id="connectionStatus">Connected</div>
@@ -871,6 +874,31 @@
                     const config = await response.json();
                     baseUrl = config.baseUrl;
                     console.log('Base URL configured:', baseUrl);
+                    
+                    // Update build info (version + build date)
+                    const buildInfoEl = document.getElementById('buildInfo');
+                    if (buildInfoEl) {
+                        const version = config.version || '';
+                        const dateIso = config.buildDate || null;
+                        let formatted = '';
+                        if (dateIso) {
+                            try {
+                                const d = new Date(dateIso);
+                                formatted = d.toLocaleString();
+                            } catch (e) {
+                                formatted = dateIso;
+                            }
+                        }
+                        if (version && formatted) {
+                            buildInfoEl.textContent = `${version} • ${formatted}`;
+                        } else if (version) {
+                            buildInfoEl.textContent = version;
+                        } else if (formatted) {
+                            buildInfoEl.textContent = formatted;
+                        } else {
+                            buildInfoEl.textContent = 'Development';
+                        }
+                    }
                 }
             } catch (error) {
                 console.warn('Could not fetch app config, using default:', error);
