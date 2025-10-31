@@ -18,8 +18,14 @@ CREATE TABLE IF NOT EXISTS courses (
     created_by TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     access_code_hash TEXT,
+    docs_repo_url TEXT,
+    docs_branch TEXT DEFAULT 'main',
+    docs_build_cmd TEXT DEFAULT 'mkdocs build',
+    docs_output_dir TEXT DEFAULT 'site',
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_courses_docs ON courses(docs_repo_url);
 
 CREATE TABLE IF NOT EXISTS course_enrollments (
     id TEXT PRIMARY KEY,
