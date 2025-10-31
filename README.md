@@ -94,42 +94,193 @@ If the key/cert cannot be loaded the server falls back to HTTP automatically. In
 
 ## Course Documentation
 
-Course materials are maintained in a separate repository (`course_esp32_basic`) and included as a Git submodule under `docs-site/`. The documentation uses MkDocs with Material theme.
+Course materials are maintained in separate repositories and included as Git submodules under the `courses/` directory. Each course uses MkDocs with Material theme for documentation.
 
-### Working with Documentation
+### Adding a New Course
 
-1. **Editing content**: Make changes inside `docs-site/docs/`
-2. **Preview locally**: 
-   ```bash
-   cd docs-site
-   pip install mkdocs mkdocs-material
-   mkdocs serve
-   ```
-3. **Build for production**:
-   ```bash
-   cd docs-site
-   mkdocs build
-   ```
-4. **Commit documentation changes**:
-   ```bash
-   cd docs-site
-   git add .
-   git commit -m "Update course content"
-   git push
-   ```
-5. **Update submodule pointer in main repo**:
-   ```bash
-   cd ..
-   git add docs-site
-   git commit -m "Update docs submodule pointer"
-   ```
+Follow these steps to create and add a new course to the platform:
 
-### Documentation Structure
+#### 1. Create Course Repository
 
-- **Course Overview**: `/docs/esp32/overview.md`
-- **Module Guides**: `/docs/esp32/module-XX.md`
-- **Reference Materials**: `/docs/esp32/appendix/`
-- **Shared Resources**: `/docs/shared/`
+Create a new folder for your course content:
+```bash
+mkdir my_new_course
+cd my_new_course
+git init
+```
+
+#### 2. Write Course in Markdown
+
+Set up the MkDocs structure:
+```bash
+# Create MkDocs configuration
+cat > mkdocs.yml << 'EOF'
+site_name: My New Course
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Module 1: modules/module-01.md
+  - Module 2: modules/module-02.md
+  - Reference: appendix/reference.md
+EOF
+
+# Create documentation structure
+mkdir -p docs/{modules,appendix,assets/{images,snippets}}
+
+# Write your course content
+cat > docs/index.md << 'EOF'
+# Welcome to My New Course
+
+Course overview and introduction...
+EOF
+
+# Create module files
+echo "# Module 1: Introduction" > docs/modules/module-01.md
+echo "# Module 2: Advanced Topics" > docs/modules/module-02.md
+echo "# Getting Started" > docs/getting-started.md
+echo "# Reference Materials" > docs/appendix/reference.md
+```
+
+#### 3. Test with MkDocs
+
+Install MkDocs and preview your course locally:
+```bash
+# Create virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install MkDocs
+pip install mkdocs mkdocs-material
+
+# Serve locally (live preview)
+mkdocs serve
+# Visit http://127.0.0.1:8000
+
+# Build static site
+mkdocs build
+# Output will be in site/ directory
+```
+
+Verify that:
+- All pages load correctly
+- Navigation works as expected
+- Images and assets display properly
+- Mobile view renders correctly
+
+#### 4. Git Push to Remote Repository
+
+Push your course to GitHub (or your Git hosting):
+```bash
+# Add a .gitignore
+cat > .gitignore << 'EOF'
+site/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+EOF
+
+# Commit and push
+git add .
+git commit -m "Initial course content"
+git remote add origin https://github.com/yourusername/my_new_course.git
+git push -u origin main
+```
+
+#### 5. Add Submodule to Main Platform
+
+In the main tutoriaz repository, add your course as a submodule:
+```bash
+cd /path/to/tutoriaz
+
+# Add the course as a submodule
+git submodule add https://github.com/yourusername/my_new_course.git courses/my_new_course
+
+# Initialize and update submodules
+git submodule update --init --recursive
+
+# Commit the submodule addition
+git add .gitmodules courses/my_new_course
+git commit -m "Add my_new_course submodule"
+git push
+```
+
+#### 6. Register Course in Platform
+
+Add the course to the database through the teacher dashboard:
+1. Login as teacher
+2. Click "New Course" button
+3. Fill in course details:
+   - **Title**: My New Course
+   - **Description**: Brief description of the course
+   - **Documentation URL**: `https://github.com/yourusername/my_new_course.git`
+   - **Documentation Branch**: `main`
+   - **Access Code**: Generate a passkey (e.g., `JOIN-MYNEWCOURSE`)
+4. Click "Create Course"
+
+The platform will automatically:
+- Pull the submodule when updates are available
+- Build documentation using MkDocs in a virtual environment
+- Serve the static site at `/docs/my_new_course/`
+
+### Updating Existing Course Content
+
+To update an existing course:
+
+```bash
+# Navigate to the course submodule
+cd courses/my_new_course
+
+# Make your changes
+vim docs/modules/module-01.md
+
+# Test locally
+source venv/bin/activate
+mkdocs serve
+
+# Commit and push
+git add .
+git commit -m "Update module 1 content"
+git push
+```
+
+The auto-update script on the production server will:
+1. Detect new commits every 5 minutes
+2. Pull the latest changes
+3. Rebuild the documentation
+4. Restart the service
+
+### Course Documentation Structure
+
+Each course should follow this structure:
+```
+my_new_course/
+├── mkdocs.yml           # MkDocs configuration
+├── docs/
+│   ├── index.md         # Course homepage
+│   ├── getting-started.md
+│   ├── modules/         # Course modules
+│   │   ├── module-01.md
+│   │   └── module-02.md
+│   ├── appendix/        # Reference materials
+│   │   └── reference.md
+│   └── assets/          # Images, code snippets
+│       ├── images/
+│       └── snippets/
+├── venv/                # Python virtual environment (gitignored)
+├── site/                # Built documentation (gitignored)
+└── .gitignore
+```
 
 ## Architecture
 
