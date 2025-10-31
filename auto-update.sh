@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-REPO_DIR="/path/to/tutoriaz"  # UPDATE THIS
+REPO_DIR="/opt/tutoriaz"  # UPDATE THIS
 BRANCH="main"
 SERVICE_NAME="tutoriaz"  # or use PM2 process name
 USE_PM2=false  # Set to true if using PM2, false for systemd
