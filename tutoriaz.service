@@ -1,0 +1,45 @@
+[Unit]
+Description=Tutoriaz Quiz Server
+Documentation=https://github.com/fxprime/tutoriaz
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+Group=YOUR_USERNAME
+WorkingDirectory=/path/to/tutoriaz
+
+# Environment variables
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=3030
+Environment=BASE_URL=http://YOUR_SERVER_IP:3030
+Environment=JWT_SECRET=your-secure-secret-key-change-this
+Environment=DB_PATH=/var/lib/tutoriaz/database.sqlite
+
+# Alternative: Load from environment file
+# EnvironmentFile=/path/to/tutoriaz/.env
+
+# Start script
+ExecStart=/usr/bin/node /path/to/tutoriaz/server.js
+# Or use the startup script:
+# ExecStart=/bin/bash /path/to/tutoriaz/start.sh
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tutoriaz
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/path/to/tutoriaz
+
+[Install]
+WantedBy=multi-user.target

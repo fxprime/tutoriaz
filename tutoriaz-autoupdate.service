@@ -1,0 +1,12 @@
+[Unit]
+Description=Tutoriaz Auto-Update Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=YOUR_USERNAME
+Group=YOUR_USERNAME
+ExecStart=/bin/bash /path/to/tutoriaz/auto-update.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tutoriaz-autoupdate

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for Tutoriaz updates every 5 minutes
+Requires=tutoriaz-autoupdate.service
+
+[Timer]
+# Check for updates every 5 minutes
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
