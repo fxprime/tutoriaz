@@ -55,35 +55,40 @@ log "Updating git submodules..."
 git submodule update --init --recursive 2>&1 | tee -a "$LOG_FILE"
 git submodule foreach 'git fetch && git pull origin main || git pull origin master' 2>&1 | tee -a "$LOG_FILE"
 
-# Build MkDocs documentation if mkdocs.yml exists
+# Build MkDocs documentation
 log "Building course documentation..."
-for course_dir in "$REPO_DIR/courses"/*; do
+COURSES_DIR="$REPO_DIR/courses"
+VENV_DIR="$COURSES_DIR/venv"
+
+# Setup shared virtual environment if it doesn't exist
+if [ ! -d "$VENV_DIR" ]; then
+    log "Creating shared virtual environment for all courses"
+    python3 -m venv "$VENV_DIR" 2>&1 | tee -a "$LOG_FILE"
+fi
+
+# Activate virtual environment once
+log "Activating virtual environment..."
+source "$VENV_DIR/bin/activate"
+
+# Install/upgrade mkdocs if needed
+log "Installing/upgrading MkDocs packages..."
+pip install --upgrade mkdocs mkdocs-material 2>&1 | tee -a "$LOG_FILE"
+
+# Build documentation for all courses
+for course_dir in "$COURSES_DIR"/*; do
     if [ -d "$course_dir" ] && [ -f "$course_dir/mkdocs.yml" ]; then
         course_name=$(basename "$course_dir")
         log "Building docs for course: $course_name"
         cd "$course_dir"
-        
-        # Setup virtual environment if it doesn't exist
-        if [ ! -d "venv" ]; then
-            log "Creating virtual environment for $course_name"
-            python3 -m venv venv 2>&1 | tee -a "$LOG_FILE"
-        fi
-        
-        # Activate virtual environment and build
-        log "Activating venv and building documentation..."
-        source venv/bin/activate
-        
-        # Install/upgrade mkdocs if needed
-        pip install --upgrade mkdocs mkdocs-material 2>&1 | tee -a "$LOG_FILE"
-        
-        # Build the documentation
         mkdocs build 2>&1 | tee -a "$LOG_FILE"
         log "✓ Documentation built for $course_name"
-        
-        deactivate
         cd "$REPO_DIR"
     fi
 done
+
+# Deactivate virtual environment
+deactivate
+log "✓ All course documentation built successfully"
 
 # Install/update dependencies
 log "Installing dependencies..."
