@@ -52,7 +52,8 @@ git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
 
 # Update submodules (for course documentation)
 log "Updating git submodules..."
-git submodule update --init --recursive --remote 2>&1 | tee -a "$LOG_FILE"
+git submodule update --init --recursive 2>&1 | tee -a "$LOG_FILE"
+git submodule foreach 'git fetch && git pull origin main || git pull origin master' 2>&1 | tee -a "$LOG_FILE"
 
 # Build MkDocs documentation if mkdocs.yml exists
 log "Building course documentation..."
@@ -61,13 +62,25 @@ for course_dir in "$REPO_DIR/courses"/*; do
         course_name=$(basename "$course_dir")
         log "Building docs for course: $course_name"
         cd "$course_dir"
-        if command -v mkdocs &> /dev/null; then
-            mkdocs build 2>&1 | tee -a "$LOG_FILE"
-            log "✓ Documentation built for $course_name"
-        else
-            log "⚠ MkDocs not installed. Skipping build for $course_name"
-            log "  Install with: pip install mkdocs mkdocs-material"
+        
+        # Setup virtual environment if it doesn't exist
+        if [ ! -d "venv" ]; then
+            log "Creating virtual environment for $course_name"
+            python3 -m venv venv 2>&1 | tee -a "$LOG_FILE"
         fi
+        
+        # Activate virtual environment and build
+        log "Activating venv and building documentation..."
+        source venv/bin/activate
+        
+        # Install/upgrade mkdocs if needed
+        pip install --upgrade mkdocs mkdocs-material 2>&1 | tee -a "$LOG_FILE"
+        
+        # Build the documentation
+        mkdocs build 2>&1 | tee -a "$LOG_FILE"
+        log "✓ Documentation built for $course_name"
+        
+        deactivate
         cd "$REPO_DIR"
     fi
 done
