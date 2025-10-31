@@ -287,6 +287,9 @@
             <button class="btn btn-danger" id="hideBtn" onclick="hideCorrectness()" style="display: none;">
                 👁️ Hide Correctness
             </button>
+            <button class="btn btn-primary" onclick="showRankings()">
+                🏆 Course Rankings
+            </button>
             <button class="btn btn-primary" onclick="clearResponses()">
                 🗑️ Clear
             </button>
@@ -295,6 +298,21 @@
         <div class="responses-container" id="responsesContainer">
             <div class="no-responses">
                 Waiting for student responses<span class="waiting-indicator"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rankings Modal -->
+    <div id="rankingsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; overflow-y: auto;">
+        <div style="max-width: 900px; margin: 40px auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0;">
+                <h2 style="font-size: 28px; font-weight: bold; color: #1a202c;">🏆 Course Rankings</h2>
+                <button onclick="closeRankings()" style="background: #e2e8f0; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; cursor: pointer; color: #4a5568;">×</button>
+            </div>
+            <div id="rankingsContent" style="min-height: 200px;">
+                <div style="text-align: center; padding: 40px; color: #718096;">
+                    Loading rankings...
+                </div>
             </div>
         </div>
     </div>
@@ -567,6 +585,86 @@
                 renderResponses();
                 updateStats();
             }
+        }
+
+        async function showRankings() {
+            const modal = document.getElementById('rankingsModal');
+            const content = document.getElementById('rankingsContent');
+            
+            modal.style.display = 'block';
+            content.innerHTML = '<div style="text-align: center; padding: 40px; color: #718096;">Loading rankings...</div>';
+            
+            try {
+                const courseId = quizData?.course_id;
+                if (!courseId) {
+                    content.innerHTML = '<div style="text-align: center; padding: 40px; color: #e53e3e;">⚠️ This quiz is not associated with a course</div>';
+                    return;
+                }
+                
+                const response = await fetch(`/api/courses/${courseId}/scores`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch rankings');
+                }
+                
+                const data = await response.json();
+                const rankings = data.scores || [];
+                
+                if (rankings.length === 0) {
+                    content.innerHTML = '<div style="text-align: center; padding: 40px; color: #718096;">No scores available yet</div>';
+                    return;
+                }
+                
+                // Render rankings table
+                content.innerHTML = `
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f7fafc; border-bottom: 2px solid #e2e8f0;">
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #4a5568;">Rank</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #4a5568;">Student</th>
+                                <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568;">Total Score</th>
+                                <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568;">Answered</th>
+                                <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568;">Correct</th>
+                                <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568;">Incorrect</th>
+                                <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568;">Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rankings.map((student, index) => {
+                                const rank = index + 1;
+                                const accuracy = student.answered_count > 0 
+                                    ? Math.round((student.correct_count / student.answered_count) * 100) 
+                                    : 0;
+                                const rankBadge = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+                                const rowStyle = rank <= 3 ? 'background: #f0fff4;' : '';
+                                
+                                return `
+                                    <tr style="${rowStyle} border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 12px; font-size: 18px; font-weight: bold;">${rankBadge}</td>
+                                        <td style="padding: 12px; font-weight: 500; color: #2d3748;">${student.display_name || student.username}</td>
+                                        <td style="padding: 12px; text-align: center; font-size: 20px; font-weight: bold; color: #667eea;">${student.total_score}</td>
+                                        <td style="padding: 12px; text-align: center; color: #718096;">${student.answered_count}</td>
+                                        <td style="padding: 12px; text-align: center; color: #38a169;">${student.correct_count}</td>
+                                        <td style="padding: 12px; text-align: center; color: #e53e3e;">${student.incorrect_count}</td>
+                                        <td style="padding: 12px; text-align: center; font-weight: 600; color: ${accuracy >= 80 ? '#38a169' : accuracy >= 60 ? '#d69e2e' : '#e53e3e'};">${accuracy}%</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Error loading rankings:', error);
+                content.innerHTML = '<div style="text-align: center; padding: 40px; color: #e53e3e;">⚠️ Failed to load rankings</div>';
+            }
+        }
+
+        function closeRankings() {
+            document.getElementById('rankingsModal').style.display = 'none';
         }
 
         // Initialize

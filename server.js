@@ -3105,6 +3105,7 @@ app.get('/api/pushes/:pushId/details', authenticateToken, async (req, res) => {
                 push_id: pushId,
                 quiz_id: activePush.quiz_id,
                 quiz_title: activePush.quiz?.title || 'Unknown Quiz',
+                course_id: activePush.quiz?.course_id || null,
                 target_students_count: activePush.targetUsers?.length || 0,
                 started_at: activePush.started_at,
                 timeout_seconds: activePush.timeout_seconds
@@ -3114,7 +3115,7 @@ app.get('/api/pushes/:pushId/details', authenticateToken, async (req, res) => {
         // Fall back to database
         const push = await new Promise((resolve, reject) => {
             db.get(
-                `SELECT qp.*, q.title as quiz_title 
+                `SELECT qp.*, q.title as quiz_title, q.course_id
                  FROM quiz_pushes qp
                  LEFT JOIN quizzes q ON qp.quiz_id = q.id
                  WHERE qp.id = ?`,
@@ -3146,6 +3147,7 @@ app.get('/api/pushes/:pushId/details', authenticateToken, async (req, res) => {
             push_id: pushId,
             quiz_id: push.quiz_id,
             quiz_title: push.quiz_title || 'Unknown Quiz',
+            course_id: push.course_id || null,
             target_students_count: targetCount,
             started_at: push.pushed_at,
             timeout_seconds: push.timeout_seconds
