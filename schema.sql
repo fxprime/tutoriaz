@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS quiz_categories (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_quiz_categories_course ON quiz_categories(course_id);
+
 -- Quizzes table
 CREATE TABLE IF NOT EXISTS quizzes (
     id TEXT PRIMARY KEY,
@@ -83,10 +85,15 @@ CREATE TABLE IF NOT EXISTS quizzes (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     active BOOLEAN DEFAULT FALSE,
     timeout_seconds INTEGER,
+    is_scored INTEGER DEFAULT 1 CHECK(is_scored IN (0, 1)),
+    points INTEGER DEFAULT 1 CHECK(points >= 0),
     FOREIGN KEY (course_id) REFERENCES courses(id),
     FOREIGN KEY (category_id) REFERENCES quiz_categories(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_quizzes_created_by ON quizzes(created_by);
+CREATE INDEX IF NOT EXISTS idx_quizzes_course ON quizzes(course_id);
 
 -- Quiz pushes (instances when quiz is sent to students)
 CREATE TABLE IF NOT EXISTS quiz_pushes (
@@ -102,6 +109,9 @@ CREATE TABLE IF NOT EXISTS quiz_pushes (
     FOREIGN KEY (pushed_by) REFERENCES users(id),
     FOREIGN KEY (course_id) REFERENCES courses(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_quiz_pushes_quiz_id ON quiz_pushes(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_pushes_course_id ON quiz_pushes(course_id);
 
 -- Quiz responses
 CREATE TABLE IF NOT EXISTS quiz_responses (
@@ -120,12 +130,8 @@ CREATE TABLE IF NOT EXISTS quiz_responses (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_quiz_responses_push_id ON quiz_responses(push_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_responses_user_id ON quiz_responses(user_id);
-CREATE INDEX IF NOT EXISTS idx_quiz_pushes_quiz_id ON quiz_pushes(quiz_id);
-CREATE INDEX IF NOT EXISTS idx_quiz_pushes_course_id ON quiz_pushes(course_id);
-CREATE INDEX IF NOT EXISTS idx_quizzes_created_by ON quizzes(created_by);
 
 -- Student quiz queue table (tracks which quizzes each student has pending)
 CREATE TABLE IF NOT EXISTS student_quiz_queue (
@@ -148,6 +154,7 @@ CREATE TABLE IF NOT EXISTS student_quiz_queue (
 CREATE INDEX IF NOT EXISTS idx_student_queue ON student_quiz_queue(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_push_queue ON student_quiz_queue(push_id, status);
 CREATE INDEX IF NOT EXISTS idx_quiz_queue ON student_quiz_queue(quiz_id, status);
+CREATE INDEX IF NOT EXISTS idx_student_queue_course ON student_quiz_queue(course_id);
 
 -- Insert default teacher account (password: admin123)
 INSERT OR IGNORE INTO users (id, username, display_name, password_hash, role) 
