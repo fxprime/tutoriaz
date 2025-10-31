@@ -131,12 +131,39 @@ fi
 # Initialize database
 echo ""
 log_info "Setting up database..."
-if [ -f "database.sqlite" ]; then
-    log_info "Database already exists. Run 'npm run bootstrap' to reset with demo data."
+
+# Check if DB_PATH is set in .env
+if [ -f ".env" ]; then
+    # Load DB_PATH from .env if it exists
+    DB_PATH=$(grep -E "^DB_PATH=" .env 2>/dev/null | cut -d'=' -f2-)
+fi
+
+# Determine which database location to check
+DB_FILE="${DB_PATH:-database.sqlite}"
+
+if [ -f "$DB_FILE" ]; then
+    log_info "Database already exists at: $DB_FILE"
+    log_info "Run 'npm run bootstrap' to reset with demo data."
 else
-    log_info "Bootstrapping database with demo data..."
+    log_info "Bootstrapping database at: $DB_FILE"
+    
+    # If using external DB_PATH, ensure directory exists
+    if [ -n "$DB_PATH" ]; then
+        DB_DIR=$(dirname "$DB_PATH")
+        if [ ! -d "$DB_DIR" ]; then
+            log_info "Creating database directory: $DB_DIR"
+            sudo mkdir -p "$DB_DIR"
+            sudo chown $USER:$USER "$DB_DIR"
+        fi
+    fi
+    
     npm run bootstrap
-    log_success "Database initialized with demo accounts"
+    
+    if [ -f "$DB_FILE" ]; then
+        log_success "Database initialized with demo accounts at: $DB_FILE"
+    else
+        log_error "Warning: Database not found after bootstrap"
+    fi
 fi
 
 # Create .env file if it doesn't exist

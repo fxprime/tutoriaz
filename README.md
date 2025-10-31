@@ -69,9 +69,15 @@ npm start
 | Script | Command | Purpose | Used By |
 |--------|---------|---------|---------|
 | **setup.sh** | `npm run setup` | First-time installation: dependencies, submodules, venv, docs build | Developers, new deployments |
-| **start.sh** | `npm start` | Development startup: updates submodules, builds docs, starts server | Local development |
-| **startByService.sh** | (systemd) | Production service startup: loads env, starts server only | systemd service |
+| **start.sh** | `npm start` | Development startup: updates submodules, builds docs, starts server | Local development (foreground) |
+| **startByService.sh** | (systemd only) | Production service startup: loads env, starts server only | systemd service (background) |
 | **auto-update.sh** | (timer) | Auto-update: git pull, submodule update, docs build, service restart | systemd timer (every 5 min) |
+| **test-service.sh** | `./test-service.sh` | Check service status and configuration | Testing/debugging production |
+
+**Important Notes:**
+- ⚠️ **Never run `bash startByService.sh` manually** - it will block your terminal. Use `sudo systemctl start tutoriaz` instead.
+- For local development: use `npm start` (runs in foreground, easy to stop with Ctrl+C)
+- For production: use `sudo systemctl start tutoriaz` (runs in background, managed by systemd)
 
 ### Enable HTTPS (optional)
 

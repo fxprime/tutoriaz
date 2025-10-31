@@ -6,7 +6,8 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = path.join(__dirname, '..', 'database.sqlite');
+// Use DB_PATH environment variable if set, otherwise default to local database.sqlite
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'database.sqlite');
 const SCHEMA_PATH = path.join(__dirname, '..', 'schema.sql');
 
 const DEFAULT_CONFIG = {
