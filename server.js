@@ -19,7 +19,8 @@ const PORT = process.env.PORT || 3030;
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const BASE_URL = process.env.BASE_URL || `http://${HOST}:${PORT}`;
-const DB_PATH = path.join(__dirname, 'database.sqlite');
+// Use DB_PATH environment variable if set, otherwise default to local database.sqlite
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'database.sqlite');
 
 // Application version and build info
 let APP_VERSION = '0.0.0';

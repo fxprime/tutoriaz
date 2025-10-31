@@ -714,8 +714,9 @@
         <div id="courseExperience" class="course-experience hidden">
             <div class="course-header-bar">
                 <div>
-                    <h2 id="activeCourseName">Course Workspace</h2>
+                    <h2 id="courseTitleHeading">Course Materials</h2>
                     <p id="activeCourseTeacher" class="course-meta-line"></p>
+                    <p id="courseDescriptionText" class="course-description">Select an enrolled course from the lobby to see its details and materials.</p>
                 </div>
                 <button class="back-to-lobby-btn" onclick="returnToLobby()">Back to Lobby</button>
             </div>
@@ -735,9 +736,6 @@
 
             <div class="content-container">
                 <div class="course-content">
-                    <h2 id="courseTitleHeading">Course Materials</h2>
-                    <p id="courseDescriptionText" class="course-description">Select an enrolled course from the lobby to see its details and materials.</p>
-                    
                     <div id="courseDocsContainer" class="course-docs-container">
                         <div class="docs-header">
                             <h3>📚 Course Documentation (LIVE)</h3>
@@ -1388,11 +1386,13 @@
         }
 
         function updateActiveCourseDisplay(course) {
-            const courseNameEl = document.getElementById('activeCourseName');
-            if (courseNameEl) {
-                courseNameEl.textContent = course.title || 'Course Workspace';
+            // Update course title in the header
+            const headingEl = document.getElementById('courseTitleHeading');
+            if (headingEl) {
+                headingEl.textContent = course.title || 'Course Materials';
             }
 
+            // Update teacher name
             const courseTeacherEl = document.getElementById('activeCourseTeacher');
             if (courseTeacherEl) {
                 const teacherName = course.teacher_display_name || course.teacher_username || '';
@@ -1400,11 +1400,7 @@
                 courseTeacherEl.style.display = teacherName ? '' : 'none';
             }
 
-            const headingEl = document.getElementById('courseTitleHeading');
-            if (headingEl) {
-                headingEl.textContent = course.title || 'Course Materials';
-            }
-
+            // Update course description
             const descriptionEl = document.getElementById('courseDescriptionText');
             if (descriptionEl) {
                 descriptionEl.textContent = course.description ? course.description : 'Your teacher has not added a description yet.';
