@@ -67,9 +67,20 @@ fi
 log_info "Checking course repositories..."
 if [ -f ".gitmodules" ]; then
     log_info "Updating course submodules..."
-    git submodule update --init --recursive --remote 2>/dev/null || {
-        log_info "Note: Could not update submodules (this is OK if already up to date)"
+    git submodule update --init --recursive 2>/dev/null || {
+        log_info "Note: Could not initialize submodules"
     }
+    
+    # Update each submodule with proper branch detection
+    git submodule foreach '
+        git fetch origin 2>/dev/null
+        if git ls-remote --heads origin main 2>/dev/null | grep -q main; then
+            git pull origin main 2>/dev/null || true
+        elif git ls-remote --heads origin master 2>/dev/null | grep -q master; then
+            git pull origin master 2>/dev/null || true
+        fi
+    ' 2>/dev/null || log_info "Note: Could not update some submodules"
+    
     log_success "Course repositories updated"
 else
     log_info "No course submodules configured yet"

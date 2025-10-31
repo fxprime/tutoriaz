@@ -53,7 +53,26 @@ git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
 # Update submodules (for course documentation)
 log "Updating git submodules..."
 git submodule update --init --recursive 2>&1 | tee -a "$LOG_FILE"
-git submodule foreach 'git fetch && git pull origin main || git pull origin master' 2>&1 | tee -a "$LOG_FILE"
+
+# Update each submodule, trying main branch first, then master
+log "Pulling latest changes for each course submodule..."
+git submodule foreach '
+    log() { echo "[$(date +"%Y-%m-%d %H:%M:%S")] $1"; }
+    
+    log "Updating submodule: $name"
+    git fetch origin 2>&1
+    
+    # Check if main branch exists
+    if git ls-remote --heads origin main | grep -q main; then
+        log "  Using main branch"
+        git pull origin main 2>&1 || log "  Warning: Could not pull from main"
+    elif git ls-remote --heads origin master | grep -q master; then
+        log "  Using master branch"
+        git pull origin master 2>&1 || log "  Warning: Could not pull from master"
+    else
+        log "  Warning: Neither main nor master branch found"
+    fi
+' 2>&1 | tee -a "$LOG_FILE"
 
 # Build MkDocs documentation
 log "Building course documentation..."
