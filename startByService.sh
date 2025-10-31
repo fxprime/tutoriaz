@@ -54,8 +54,10 @@ if [ -n "$DB_PATH" ]; then
     # Ensure the directory exists
     DB_DIR=$(dirname "$DB_PATH")
     if [ ! -d "$DB_DIR" ]; then
-        log_error "Database directory does not exist: $DB_DIR"
-        exit 1
+        log_info "Creating database directory: $DB_DIR"
+        sudo mkdir -p "$DB_DIR"
+        sudo chown $USER:$USER "$DB_DIR"
+        log_success "Database directory created"
     fi
 fi
 
