@@ -20,10 +20,8 @@ Environment=DB_PATH=/var/lib/tutoriaz/database.sqlite
 # Alternative: Load from environment file
 # EnvironmentFile=/home/thanabadeebulunseechart/learning/tutoriaz/.env
 
-# Start script
-ExecStart=/usr/bin/node /home/thanabadeebulunseechart/learning/tutoriaz/server.js
-# Or use the startup script:
-# ExecStart=/bin/bash /home/thanabadeebulunseechart/learning/tutoriaz/start.sh
+# Start script (uses startByService.sh - documentation building handled by auto-update.sh)
+ExecStart=/bin/bash /home/thanabadeebulunseechart/learning/tutoriaz/startByService.sh
 
 # Restart policy
 Restart=always

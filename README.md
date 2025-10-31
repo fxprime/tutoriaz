@@ -18,32 +18,60 @@ Vibe coding By Modulemore via ChatGPT
 
 - Node.js 16+ 
 - npm or yarn
+- Python 3.7+ (for course documentation)
+- Git
 
 ### Installation
+
+Run the automated setup script:
+```bash
+./setup.sh
+```
+
+Or manually:
 
 1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Initialize documentation submodule:
+2. Initialize and update course submodules:
 ```bash
 git submodule update --init --recursive
 ```
 
-3. Bootstrap the demo database:
+3. Setup Python virtual environment and build documentation:
+```bash
+python3 -m venv courses/venv
+source courses/venv/bin/activate
+pip install mkdocs mkdocs-material
+# Build each course
+cd courses/your_course && mkdocs build && cd ../..
+deactivate
+```
+
+4. Bootstrap the demo database:
 ```bash
 npm run bootstrap
 ```
 
 > **Note:** This script removes any existing `database.sqlite` before recreating demo data.
 
-3. Start the server:
+5. Start the server:
 ```bash
 npm start
 ```
 
-4. Open your browser to `http://localhost:3030` (or `https://localhost:3030` if HTTPS is configured)
+6. Open your browser to `http://localhost:3030` (or `https://localhost:3030` if HTTPS is configured)
+
+### Scripts Overview
+
+| Script | Command | Purpose | Used By |
+|--------|---------|---------|---------|
+| **setup.sh** | `npm run setup` | First-time installation: dependencies, submodules, venv, docs build | Developers, new deployments |
+| **start.sh** | `npm start` | Development startup: updates submodules, builds docs, starts server | Local development |
+| **startByService.sh** | (systemd) | Production service startup: loads env, starts server only | systemd service |
+| **auto-update.sh** | (timer) | Auto-update: git pull, submodule update, docs build, service restart | systemd timer (every 5 min) |
 
 ### Enable HTTPS (optional)
 
