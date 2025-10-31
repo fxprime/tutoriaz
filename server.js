@@ -906,8 +906,8 @@ const getUserFromDB = (username) => {
 const createQuizInDB = (quiz) => {
     return new Promise((resolve, reject) => {
         const stmt = db.prepare(`
-            INSERT INTO quizzes (id, title, content_text, images, question_type, options, correct_answer, category_id, course_id, created_by, timeout_seconds)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO quizzes (id, title, content_text, images, question_type, options, correct_answer, category_id, course_id, created_by, timeout_seconds, is_scored, points)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         stmt.run([
             quiz.id, quiz.title, quiz.content_text, 
@@ -917,7 +917,9 @@ const createQuizInDB = (quiz) => {
             quiz.correct_answer,
             quiz.category_id,
             quiz.course_id,
-            quiz.created_by, quiz.timeout_seconds
+            quiz.created_by, quiz.timeout_seconds,
+            quiz.is_scored !== undefined ? quiz.is_scored : 1,
+            quiz.points !== undefined ? quiz.points : 1
         ], function(err) {
             if (err) reject(err);
             else resolve({ id: quiz.id, ...quiz });
@@ -2056,6 +2058,176 @@ app.get('/api/courses/:courseId/enrollments', authenticateToken, async (req, res
     }
 });
 
+// Get student scores and rankings for a course (teacher only)
+app.get('/api/courses/:courseId/scores', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { courseId } = req.params;
+        const course = await getCourseById(courseId);
+        if (!course || course.created_by !== req.user.userId) {
+            return res.status(404).json({ error: 'Course not found or access denied' });
+        }
+
+        // Get all enrolled students
+        const students = await new Promise((resolve, reject) => {
+            const query = `
+                SELECT u.id, u.username, u.display_name
+                FROM course_enrollments e
+                JOIN users u ON e.student_id = u.id
+                WHERE e.course_id = ?
+                ORDER BY u.display_name
+            `;
+            db.all(query, [courseId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        // Calculate scores for each student
+        // We need to check correctness, so we'll fetch responses and check them programmatically
+        const responsesQuery = `
+            SELECT 
+                qr.user_id,
+                qr.answer_text,
+                q.question_type,
+                q.correct_answer,
+                q.points,
+                q.is_scored,
+                qr.status
+            FROM quiz_responses qr
+            JOIN quizzes q ON qr.quiz_id = q.id
+            JOIN quiz_pushes qp ON qr.push_id = qp.id
+            WHERE q.course_id = ?
+              AND (qp.undone_at IS NULL OR qp.undone_at = '')
+              AND qr.status != 'ignored'
+              AND q.is_scored = 1
+              AND qr.status = 'answered'
+        `;
+
+        const responses = await new Promise((resolve, reject) => {
+            db.all(responsesQuery, [courseId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        // Calculate scores by checking correctness
+        const scoresMap = {};
+        responses.forEach(response => {
+            if (!scoresMap[response.user_id]) {
+                scoresMap[response.user_id] = {
+                    total_score: 0,
+                    correct_count: 0,
+                    incorrect_count: 0,
+                    answered_count: 0
+                };
+            }
+
+            scoresMap[response.user_id].answered_count++;
+
+            // Check if answer is correct
+            if (response.correct_answer) {
+                const answerValue = parseStoredAnswer(response.answer_text);
+                const correctValue = parseStoredAnswer(response.correct_answer);
+                
+                let isCorrect = false;
+                
+                if (response.question_type === 'select' && answerValue && typeof answerValue === 'object') {
+                    // Extract answer from select-type response
+                    const selectedText = answerValue.selected_text || '';
+                    const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
+                    const extractedAnswer = match ? match[1].trim() : selectedText.trim();
+                    isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
+                } else {
+                    // Direct comparison for text-type
+                    const answerDisplay = formatAnswerForDisplay(answerValue);
+                    const correctDisplay = formatAnswerForDisplay(correctValue);
+                    isCorrect = answerDisplay.toLowerCase().trim() === correctDisplay.toLowerCase().trim();
+                }
+
+                if (isCorrect) {
+                    scoresMap[response.user_id].total_score += response.points || 0;
+                    scoresMap[response.user_id].correct_count++;
+                } else {
+                    scoresMap[response.user_id].incorrect_count++;
+                }
+            }
+        });
+
+        // Get timeout counts separately
+        const timeoutQuery = `
+            SELECT 
+                qr.user_id,
+                COUNT(*) as timeout_count
+            FROM quiz_responses qr
+            JOIN quizzes q ON qr.quiz_id = q.id
+            JOIN quiz_pushes qp ON qr.push_id = qp.id
+            WHERE q.course_id = ?
+              AND (qp.undone_at IS NULL OR qp.undone_at = '')
+              AND qr.status = 'timeout'
+              AND q.is_scored = 1
+            GROUP BY qr.user_id
+        `;
+
+        const timeouts = await new Promise((resolve, reject) => {
+            db.all(timeoutQuery, [courseId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        timeouts.forEach(timeout => {
+            if (!scoresMap[timeout.user_id]) {
+                scoresMap[timeout.user_id] = {
+                    total_score: 0,
+                    correct_count: 0,
+                    incorrect_count: 0,
+                    answered_count: 0
+                };
+            }
+            scoresMap[timeout.user_id].timeout_count = Number(timeout.timeout_count || 0);
+        });
+
+        // Build student scores array
+        const studentScores = students.map(student => ({
+            student_id: student.id,
+            username: student.username,
+            display_name: student.display_name || student.username,
+            total_score: scoresMap[student.id]?.total_score || 0,
+            answered_count: scoresMap[student.id]?.answered_count || 0,
+            correct_count: scoresMap[student.id]?.correct_count || 0,
+            incorrect_count: scoresMap[student.id]?.incorrect_count || 0,
+            timeout_count: scoresMap[student.id]?.timeout_count || 0
+        }));
+
+        // Sort by total_score descending and assign rankings
+        studentScores.sort((a, b) => b.total_score - a.total_score);
+        
+        let currentRank = 1;
+        studentScores.forEach((student, index) => {
+            if (index > 0 && student.total_score < studentScores[index - 1].total_score) {
+                currentRank = index + 1;
+            }
+            student.rank = currentRank;
+        });
+
+        res.json({
+            course: {
+                id: course.id,
+                title: course.title,
+                description: course.description
+            },
+            scores: studentScores
+        });
+    } catch (error) {
+        console.error('Get course scores error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Get current user
 app.get('/api/me', authenticateToken, (req, res) => {
     res.json({ user: req.user });
@@ -2090,7 +2262,7 @@ app.post('/api/quizzes', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Teacher access required' });
         }
 
-        const { title, content_text, images, question_type, options, correct_answer, category_id, course_id, timeout_seconds } = req.body;
+        const { title, content_text, images, question_type, options, correct_answer, category_id, course_id, timeout_seconds, is_scored, points } = req.body;
         
         if (!title || !question_type) {
             return res.status(400).json({ error: 'Title and question type required' });
@@ -2123,7 +2295,9 @@ app.post('/api/quizzes', authenticateToken, async (req, res) => {
             category_id: category_id || null,
             course_id,
             created_by: req.user.userId,
-            timeout_seconds: timeout_seconds || 60
+            timeout_seconds: timeout_seconds || 60,
+            is_scored: is_scored !== undefined ? (is_scored ? 1 : 0) : 1,
+            points: points !== undefined ? parseInt(points, 10) : 1
         };
 
         const savedQuiz = await createQuizInDB(quiz);
@@ -2142,7 +2316,7 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
         }
 
         const { quizId } = req.params;
-        const { title, content_text, images, question_type, options, correct_answer, category_id, course_id, timeout_seconds } = req.body;
+        const { title, content_text, images, question_type, options, correct_answer, category_id, course_id, timeout_seconds, is_scored, points } = req.body;
         
         if (!title || !question_type) {
             return res.status(400).json({ error: 'Title and question type required' });
@@ -2184,7 +2358,7 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
         // Update quiz in database
         const stmt = db.prepare(`
             UPDATE quizzes 
-            SET title = ?, content_text = ?, images = ?, question_type = ?, options = ?, correct_answer = ?, category_id = ?, timeout_seconds = ?
+            SET title = ?, content_text = ?, images = ?, question_type = ?, options = ?, correct_answer = ?, category_id = ?, timeout_seconds = ?, is_scored = ?, points = ?
             WHERE id = ? AND created_by = ?
         `);
         
@@ -2197,6 +2371,8 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
             correct_answer || '',
             category_id || null,
             timeout_seconds || 60,
+            is_scored !== undefined ? (is_scored ? 1 : 0) : 1,
+            points !== undefined ? parseInt(points, 10) : 1,
             quizId,
             req.user.userId
         ], function(err) {
@@ -2261,8 +2437,29 @@ app.get('/api/quizzes/:quizId/responses', authenticateToken, async (req, res) =>
         // Check if answer is correct
         const responsesWithGrading = responses.map(response => {
             const answerValue = parseStoredAnswer(response.answer_text);
-            const answerDisplay = formatAnswerForDisplay(answerValue);
+            let answerDisplay = formatAnswerForDisplay(answerValue);
             const name = response.display_name || response.username;
+
+            // For select-type questions, extract the actual answer from the object
+            let isCorrect = null;
+            if (quiz.correct_answer) {
+                if (quiz.question_type === 'select' && answerValue && typeof answerValue === 'object') {
+                    // Student answer is {selected_index: 2, selected_text: "(c) 1945"}
+                    // Need to extract just the answer part without the option label
+                    const selectedText = answerValue.selected_text || '';
+                    answerDisplay = selectedText;
+                    
+                    // Extract the answer after the closing parenthesis, e.g., "(c) 1945" -> "1945"
+                    const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
+                    const extractedAnswer = match ? match[1].trim() : selectedText.trim();
+                    
+                    // Compare with correct answer (case-insensitive for text)
+                    isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
+                } else {
+                    // For text-type or other questions, direct comparison
+                    isCorrect = answerDisplay.toLowerCase().trim() === String(correctDisplay).toLowerCase().trim();
+                }
+            }
 
             return {
                 ...response,
@@ -2270,7 +2467,7 @@ app.get('/api/quizzes/:quizId/responses', authenticateToken, async (req, res) =>
                 answer_text: answerDisplay,
                 raw_answer_text: response.answer_text,
                 correct_answer_text: correctDisplay,
-                is_correct: quiz.correct_answer ? (answerDisplay === correctDisplay) : null
+                is_correct: isCorrect
             };
         });
 
@@ -2871,6 +3068,159 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
     }
 });
 
+// Get push details for monitor (teacher only)
+app.get('/api/pushes/:pushId/details', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { pushId } = req.params;
+
+        // Try to get from active pushes first
+        const activePush = activePushes.get(pushId);
+        if (activePush) {
+            return res.json({
+                push_id: pushId,
+                quiz_id: activePush.quiz_id,
+                quiz_title: activePush.quiz?.title || 'Unknown Quiz',
+                target_students_count: activePush.targetUsers?.length || 0,
+                started_at: activePush.started_at,
+                timeout_seconds: activePush.timeout_seconds
+            });
+        }
+
+        // Fall back to database
+        const push = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT qp.*, q.title as quiz_title 
+                 FROM quiz_pushes qp
+                 LEFT JOIN quizzes q ON qp.quiz_id = q.id
+                 WHERE qp.id = ?`,
+                [pushId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!push) {
+            return res.status(404).json({ error: 'Push not found' });
+        }
+
+        // Count target students from queue
+        const targetCount = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT COUNT(DISTINCT user_id) as count FROM student_quiz_queue WHERE push_id = ?',
+                [pushId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row?.count || 0);
+                }
+            );
+        });
+
+        res.json({
+            push_id: pushId,
+            quiz_id: push.quiz_id,
+            quiz_title: push.quiz_title || 'Unknown Quiz',
+            target_students_count: targetCount,
+            started_at: push.pushed_at,
+            timeout_seconds: push.timeout_seconds
+        });
+    } catch (error) {
+        console.error('Get push details error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get responses for a specific push (teacher only)
+app.get('/api/pushes/:pushId/responses', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { pushId } = req.params;
+
+        // Get push to verify it exists and get quiz info
+        const push = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT qp.*, q.correct_answer, q.question_type 
+                 FROM quiz_pushes qp
+                 LEFT JOIN quizzes q ON qp.quiz_id = q.id
+                 WHERE qp.id = ?`,
+                [pushId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!push) {
+            return res.status(404).json({ error: 'Push not found' });
+        }
+
+        // Get all responses for this push
+        const responses = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT qr.*, u.username, u.display_name
+                 FROM quiz_responses qr
+                 JOIN users u ON qr.user_id = u.id
+                 WHERE qr.push_id = ?
+                 ORDER BY qr.answered_at DESC`,
+                [pushId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        // Calculate correctness for each response
+        const responsesWithCorrectness = responses.map(response => {
+            let isCorrect = null;
+            
+            if (push.correct_answer && response.status === 'answered') {
+                const answerValue = parseStoredAnswer(response.answer_text);
+                const correctValue = parseStoredAnswer(push.correct_answer);
+                
+                if (push.question_type === 'select' && answerValue && typeof answerValue === 'object') {
+                    const selectedText = answerValue.selected_text || '';
+                    const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
+                    const extractedAnswer = match ? match[1].trim() : selectedText.trim();
+                    isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
+                } else {
+                    const answerDisplay = formatAnswerForDisplay(answerValue);
+                    const correctDisplay = formatAnswerForDisplay(correctValue);
+                    isCorrect = answerDisplay.toLowerCase().trim() === correctDisplay.toLowerCase().trim();
+                }
+            }
+
+            return {
+                user_id: response.user_id,
+                username: response.username,
+                display_name: response.display_name || response.username,
+                quiz_id: response.quiz_id,
+                elapsed_ms: response.elapsed_ms,
+                answered_at: response.answered_at,
+                status: response.status,
+                is_correct: isCorrect
+            };
+        });
+
+        res.json({
+            push_id: pushId,
+            responses: responsesWithCorrectness
+        });
+    } catch (error) {
+        console.error('Get push responses error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 async function resolveActivePush(identifier) {
     const normalized = identifier ? String(identifier).trim() : '';
     if (!normalized) {
@@ -3020,13 +3370,17 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
         }
 
         // Mark prior responses for this quiz as ignored so students can re-answer
+        // BUT only mark responses that belong to pushes BEFORE the current one being undone
+        // This way, if a student answered during this push, their response stays valid
         if (targetQuizId) {
             await new Promise((resolve, reject) => {
                 db.run(
                     `UPDATE quiz_responses 
                      SET status = 'ignored' 
-                     WHERE quiz_id = ? AND status != 'ignored'`,
-                    [targetQuizId],
+                     WHERE quiz_id = ? 
+                       AND push_id != ?
+                       AND status != 'ignored'`,
+                    [targetQuizId, pushId],
                     (err) => {
                         if (err) {
                             console.error('Error marking responses ignored:', err);
@@ -3942,9 +4296,27 @@ io.on('connection', (socket) => {
                         // Update online list to reflect queue changes
                         updateOnlineList();
 
-                        // Notify teachers
+                        // Notify teachers with correctness information
                         const teachers = Array.from(connectedUsers.values())
                             .filter(u => u.role === 'teacher');
+                        
+                        // Calculate correctness
+                        let isCorrect = null;
+                        if (push.quiz && push.quiz.correct_answer) {
+                            const answerValue = parseStoredAnswer(serializedAnswer);
+                            const correctValue = parseStoredAnswer(push.quiz.correct_answer);
+                            
+                            if (push.quiz.question_type === 'select' && answerValue && typeof answerValue === 'object') {
+                                const selectedText = answerValue.selected_text || '';
+                                const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
+                                const extractedAnswer = match ? match[1].trim() : selectedText.trim();
+                                isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
+                            } else {
+                                const answerDisplay = formatAnswerForDisplay(answerValue);
+                                const correctDisplay = formatAnswerForDisplay(correctValue);
+                                isCorrect = answerDisplay.toLowerCase().trim() === correctDisplay.toLowerCase().trim();
+                            }
+                        }
                         
                         teachers.forEach(teacher => {
                             const studentDisplayName = user.display_name || user.username;
@@ -3959,6 +4331,7 @@ io.on('connection', (socket) => {
                                 elapsed_ms: elapsedMs,
                                 answered_at: normalizedAnsweredAt,
                                 status: 'answered',
+                                is_correct: isCorrect,
                                 course_id: push.course_id || null
                             });
                         });

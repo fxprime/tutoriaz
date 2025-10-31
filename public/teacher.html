@@ -738,7 +738,10 @@
                 <h2 id="teacherActiveCourseName">Course Workspace</h2>
                 <p id="teacherActiveCourseMeta" class="course-meta-line"></p>
             </div>
-            <button class="back-to-lobby-btn" onclick="returnToTeacherLobby()">Back to Lobby</button>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-info" onclick="showStudentScores()" style="padding: 8px 16px;">📊 View Student Scores</button>
+                <button class="back-to-lobby-btn" onclick="returnToTeacherLobby()">Back to Lobby</button>
+            </div>
         </div>
 
         <div class="main-content">
@@ -780,6 +783,16 @@
                     <div class="form-group">
                         <label for="timeoutSeconds">Timeout (seconds)</label>
                         <input type="number" id="timeoutSeconds" value="60" min="10" max="600">
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="isScored" checked>
+                            <span>Scored Quiz (counts toward student score)</span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="pointsGroup">
+                        <label for="quizPoints">Points Value</label>
+                        <input type="number" id="quizPoints" value="1" min="0" max="100">
                     </div>
                     <button type="submit" class="btn btn-success">Create Quiz</button>
                 </form>
@@ -1608,6 +1621,16 @@
             }
         });
 
+        // Handle scoring checkbox
+        document.getElementById('isScored').addEventListener('change', function() {
+            const pointsGroup = document.getElementById('pointsGroup');
+            if (this.checked) {
+                pointsGroup.style.display = 'block';
+            } else {
+                pointsGroup.style.display = 'none';
+            }
+        });
+
         // Set up form handler - use a flag to track mode
         let isEditMode = false;
         let currentEditQuizId = null;
@@ -1729,6 +1752,7 @@
                                 <div class="quiz-info">
                                     Type: ${quiz.question_type} | Timeout: ${quiz.timeout_seconds}s
                                     ${quiz.question_type === 'select' ? `| ${quiz.options.length} options` : ''}
+                                    ${quiz.is_scored ? `| <span style="color: #28a745; font-weight: bold;">📊 ${quiz.points || 1} pts</span>` : `| <span style="color: #666;">Non-scored</span>`}
                                     ${quiz.correct_answer ? `<br>Answer: <strong>${quiz.correct_answer}</strong>` : ''}
                                 </div>
                                 <div class="quiz-actions">
@@ -1802,6 +1826,9 @@
                     // Initialize responses section
                     activeResponses.set(data.push.id, []);
                     updateQueueStatus();
+
+                    // Open quiz monitor popup
+                    openQuizMonitor(data.push.id, quizId);
                 } else {
                     showNotification(data.error, 'error');
                 }
@@ -2340,6 +2367,12 @@
             document.getElementById('correctAnswer').value = quiz.correct_answer || '';
             document.getElementById('quizCategory').value = quiz.category_id || '';
             document.getElementById('timeoutSeconds').value = quiz.timeout_seconds;
+            
+            // Populate scoring fields
+            const isScored = quiz.is_scored !== undefined ? Boolean(quiz.is_scored) : true;
+            document.getElementById('isScored').checked = isScored;
+            document.getElementById('quizPoints').value = quiz.points !== undefined ? quiz.points : 1;
+            document.getElementById('pointsGroup').style.display = isScored ? 'block' : 'none';
 
             if (quiz.question_type === 'select') {
                 document.getElementById('optionsGroup').classList.remove('hidden');
@@ -2378,6 +2411,16 @@
 
             const timeoutValue = parseInt(document.getElementById('timeoutSeconds').value, 10);
             formData.timeout_seconds = Number.isFinite(timeoutValue) ? timeoutValue : 60;
+
+            // Add scoring fields
+            const isScored = document.getElementById('isScored').checked;
+            formData.is_scored = isScored;
+            if (isScored) {
+                const pointsValue = parseInt(document.getElementById('quizPoints').value, 10);
+                formData.points = Number.isFinite(pointsValue) && pointsValue >= 0 ? pointsValue : 1;
+            } else {
+                formData.points = 0;
+            }
 
             console.log('Update formData:', formData);
 
@@ -2449,6 +2492,16 @@
 
             const timeoutValue = parseInt(document.getElementById('timeoutSeconds').value, 10);
             formData.timeout_seconds = Number.isFinite(timeoutValue) ? timeoutValue : 60;
+
+            // Add scoring fields
+            const isScored = document.getElementById('isScored').checked;
+            formData.is_scored = isScored;
+            if (isScored) {
+                const pointsValue = parseInt(document.getElementById('quizPoints').value, 10);
+                formData.points = Number.isFinite(pointsValue) && pointsValue >= 0 ? pointsValue : 1;
+            } else {
+                formData.points = 0;
+            }
 
             if (formData.question_type === 'select') {
                 const optionsText = document.getElementById('quizOptions').value;
@@ -2648,6 +2701,117 @@
             });
         }
 
+        // Show student scores and rankings
+        async function showStudentScores() {
+            if (!selectedCourseId) {
+                showNotification('Please select a course first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/courses/${selectedCourseId}/scores`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load scores');
+                }
+
+                const data = await response.json();
+                displayScoresModal(data);
+            } catch (error) {
+                console.error('Error loading scores:', error);
+                showNotification('Failed to load student scores', 'error');
+            }
+        }
+
+        // Display scores in a modal
+        function displayScoresModal(data) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.5); z-index: 1000; 
+                display: flex; align-items: center; justify-content: center;
+            `;
+
+            const content = document.createElement('div');
+            content.style.cssText = `
+                background: white; padding: 30px; border-radius: 8px; 
+                max-width: 900px; max-height: 90%; overflow-y: auto; width: 90%;
+            `;
+
+            const scoresHtml = data.scores.length > 0 ? `
+                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <thead>
+                        <tr style="background: #007bff; color: white;">
+                            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Rank</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Student</th>
+                            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Score</th>
+                            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Correct</th>
+                            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Wrong</th>
+                            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Timeout</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.scores.map((student, index) => `
+                            <tr style="background: ${index % 2 === 0 ? '#f8f9fa' : 'white'};">
+                                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                                    <span style="font-weight: bold; font-size: 18px; color: ${student.rank === 1 ? '#ffd700' : student.rank === 2 ? '#c0c0c0' : student.rank === 3 ? '#cd7f32' : '#666'};">
+                                        ${student.rank === 1 ? '🥇' : student.rank === 2 ? '🥈' : student.rank === 3 ? '🥉' : student.rank}
+                                    </span>
+                                </td>
+                                <td style="padding: 10px; border: 1px solid #ddd;">
+                                    <div style="font-weight: bold;">${student.display_name}</div>
+                                    <div style="font-size: 12px; color: #666;">${student.username}</div>
+                                </td>
+                                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                                    <span style="font-size: 20px; font-weight: bold; color: #28a745;">${student.total_score}</span>
+                                </td>
+                                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                                    <span style="color: #28a745; font-weight: bold;">${student.correct_count || 0} ✓</span>
+                                </td>
+                                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                                    <span style="color: #dc3545; font-weight: bold;">${student.incorrect_count || 0} ✗</span>
+                                </td>
+                                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                                    <span style="color: #ffc107;">${student.timeout_count || 0} ⏱</span>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            ` : '<p style="text-align: center; color: #666; padding: 40px;">No student scores available yet</p>';
+
+            content.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">📊 Student Scores & Rankings</h2>
+                    <button onclick="this.closest('div').parentElement.remove()" 
+                            style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                        Close
+                    </button>
+                </div>
+                
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 4px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">Course: ${data.course.title}</h3>
+                    <p style="margin: 0; color: #666;">${data.course.description || ''}</p>
+                </div>
+
+                ${scoresHtml}
+            `;
+
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+
+            // Close on background click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+
         // Update queue status display
         function updateQueueStatus(data) {
             // Request current queue status from server
@@ -2677,6 +2841,28 @@
                 console.error('Error fetching queue status:', err);
                 document.getElementById('queueItems').innerHTML = '<div style="color: #dc3545;">Error loading queue status</div>';
             });
+        }
+
+        // Open quiz monitor popup window
+        function openQuizMonitor(pushId, quizId) {
+            const width = 850;
+            const height = 700;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            
+            const monitorUrl = `/quiz-monitor.html?pushId=${encodeURIComponent(pushId)}&quizId=${encodeURIComponent(quizId)}&token=${encodeURIComponent(token)}`;
+            
+            const monitorWindow = window.open(
+                monitorUrl,
+                `QuizMonitor_${pushId}`,
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+            );
+
+            if (monitorWindow) {
+                monitorWindow.focus();
+            } else {
+                showNotification('Please allow popups to view the quiz monitor', 'error');
+            }
         }
 
         // Logout
