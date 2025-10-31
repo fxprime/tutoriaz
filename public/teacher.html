@@ -171,6 +171,13 @@
         .course-card-actions .select-btn:hover {
             background-color: #1d4ed8;
         }
+        .course-card-actions .edit-btn {
+            background-color: #f59e0b;
+            color: white;
+        }
+        .course-card-actions .edit-btn:hover {
+            background-color: #d97706;
+        }
         .course-card-actions .delete-btn {
             background-color: #fee2e2;
             color: #b91c1c;
@@ -675,6 +682,116 @@
         .hidden {
             display: none;
         }
+        
+        /* Edit Course Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        .modal-overlay.hidden {
+            display: none !important;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .modal-header h2 {
+            margin: 0;
+            color: #1a202c;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #718096;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close:hover {
+            color: #2d3748;
+        }
+        .modal-form .form-row {
+            margin-bottom: 20px;
+        }
+        .modal-form label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        .modal-form input,
+        .modal-form textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .modal-form textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .modal-form small {
+            display: block;
+            margin-top: 5px;
+            color: #718096;
+            font-size: 12px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+            justify-content: flex-end;
+        }
+        .modal-actions button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .modal-actions .cancel-btn {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        .modal-actions .cancel-btn:hover {
+            background: #cbd5e0;
+        }
+        .modal-actions .save-btn {
+            background: #2563eb;
+            color: white;
+        }
+        .modal-actions .save-btn:hover {
+            background: #1d4ed8;
+        }
     </style>
 </head>
 <body>
@@ -712,12 +829,12 @@
                 <button type="button" id="generateLobbyPasskey" class="generate-btn">Generate</button>
             </div>
             <div class="form-row">
-                <label for="lobbyDocsRepoUrl">Documentation Repository (Optional)</label>
-                <input type="url" id="lobbyDocsRepoUrl" placeholder="https://github.com/username/course-docs.git">
-                <small>Link to course materials repository (GitHub, GitLab, etc.)</small>
+                <label for="lobbyDocsRepoUrl">Course Documentation URL (Optional)</label>
+                <input type="url" id="lobbyDocsRepoUrl" placeholder="http://localhost:3030/docs/esp32_basic/site/">
+                <small>Full URL to documentation (e.g., http://localhost:3030/docs/course_name/site/ or https://user.github.io/repo/)</small>
             </div>
             <div class="form-row">
-                <label for="lobbyDocsBranch">Docs Branch</label>
+                <label for="lobbyDocsBranch">Docs Branch (for GitHub URLs)</label>
                 <input type="text" id="lobbyDocsBranch" placeholder="main" value="main">
             </div>
             <p class="lobby-intro">Passkeys are only displayed once. Save it now before sending to students.</p>
@@ -1223,6 +1340,7 @@
                             <p class="meta">Created ${escapeHtml(createdAt)} • Enrolled: ${enrolledCount}</p>
                             <div class="course-card-actions">
                                 <button data-course-action="select" data-course-id="${escapeHtml(course.id)}" class="select-btn">Open Course</button>
+                                <button data-course-action="edit" data-course-id="${escapeHtml(course.id)}" class="edit-btn">Edit</button>
                                 <button data-course-action="delete" data-course-id="${escapeHtml(course.id)}" class="delete-btn">Delete</button>
                             </div>
                         </div>
@@ -1232,6 +1350,10 @@
 
             listEl.querySelectorAll('[data-course-action="select"]').forEach(button => {
                 button.addEventListener('click', () => selectCourse(button.getAttribute('data-course-id')));
+            });
+
+            listEl.querySelectorAll('[data-course-action="edit"]').forEach(button => {
+                button.addEventListener('click', () => openEditCourseModal(button.getAttribute('data-course-id')));
             });
 
             listEl.querySelectorAll('[data-course-action="delete"]').forEach(button => {
@@ -1479,6 +1601,104 @@
             }
         }
 
+        function openEditCourseModal(courseId) {
+            const course = teacherCourses.find(c => c.id === courseId);
+            if (!course) {
+                showNotification('Course not found', 'error');
+                return;
+            }
+
+            // Populate the form
+            document.getElementById('editCourseId').value = course.id;
+            document.getElementById('editCourseTitle').value = course.title || '';
+            document.getElementById('editCourseDescription').value = course.description || '';
+            document.getElementById('editDocsRepoUrl').value = course.docs_repo_url || '';
+            document.getElementById('editDocsBranch').value = course.docs_branch || 'main';
+            document.getElementById('editCoursePasskey').value = ''; // Always empty for security
+
+            // Show the modal
+            document.getElementById('editCourseModal').classList.remove('hidden');
+        }
+
+        function closeEditCourseModal() {
+            document.getElementById('editCourseModal').classList.add('hidden');
+            // Clear form
+            document.getElementById('editCourseForm').reset();
+        }
+
+        async function handleEditCourse(event) {
+            event.preventDefault();
+
+            const courseId = document.getElementById('editCourseId').value;
+            const title = document.getElementById('editCourseTitle').value.trim();
+            const description = document.getElementById('editCourseDescription').value.trim();
+            const docsRepoUrl = document.getElementById('editDocsRepoUrl').value.trim();
+            const docsBranch = document.getElementById('editDocsBranch').value.trim();
+            const passkey = document.getElementById('editCoursePasskey').value.trim();
+
+            if (!title) {
+                showNotification('Course title is required', 'error');
+                return;
+            }
+
+            if (passkey && passkey.length < 4) {
+                showNotification('Passkey must be at least 4 characters', 'error');
+                return;
+            }
+
+            try {
+                const payload = {
+                    title,
+                    description,
+                    docs_repo_url: docsRepoUrl || null,
+                    docs_branch: docsBranch || 'main'
+                };
+
+                // Only include passkey if it's being changed
+                if (passkey) {
+                    payload.access_code = passkey;
+                }
+
+                const response = await fetch(`/api/courses/${courseId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to update course');
+                }
+
+                // Show success message
+                if (data.passkey_updated) {
+                    showNotification('Course updated! Passkey has been changed.', 'success');
+                } else {
+                    showNotification('Course updated successfully', 'success');
+                }
+
+                // Close modal
+                closeEditCourseModal();
+
+                // Reload courses
+                await loadTeacherCourses();
+
+                // If this is the selected course, update the header
+                if (selectedCourseId === courseId) {
+                    const updatedCourse = teacherCourses.find(c => c.id === courseId);
+                    if (updatedCourse) {
+                        updateTeacherCourseHeader(updatedCourse);
+                    }
+                }
+            } catch (error) {
+                console.error('Edit course error:', error);
+                showNotification(error.message || 'Failed to update course', 'error');
+            }
+        }
+
         async function deleteCourse(courseId) {
             const course = teacherCourses.find(item => item.id === courseId);
             const courseName = course ? course.title : 'this course';
@@ -1541,6 +1761,21 @@
                 const createCourseForm = document.getElementById('createCourseLobbyForm');
                 if (createCourseForm) {
                     createCourseForm.addEventListener('submit', handleCreateCourse);
+                }
+
+                const editCourseForm = document.getElementById('editCourseForm');
+                if (editCourseForm) {
+                    editCourseForm.addEventListener('submit', handleEditCourse);
+                }
+
+                // Close modal when clicking outside
+                const editModal = document.getElementById('editCourseModal');
+                if (editModal) {
+                    editModal.addEventListener('click', (e) => {
+                        if (e.target === editModal) {
+                            closeEditCourseModal();
+                        }
+                    });
                 }
 
                 const generateButton = document.getElementById('generateLobbyPasskey');
@@ -2878,5 +3113,45 @@
         // Initialize configuration on page load
         fetchAppConfig();
     </script>
+
+    <!-- Edit Course Modal -->
+    <div id="editCourseModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Course</h2>
+                <button class="modal-close" onclick="closeEditCourseModal()">&times;</button>
+            </div>
+            <form id="editCourseForm" class="modal-form">
+                <input type="hidden" id="editCourseId">
+                <div class="form-row">
+                    <label for="editCourseTitle">Course Title *</label>
+                    <input type="text" id="editCourseTitle" maxlength="100" required>
+                </div>
+                <div class="form-row">
+                    <label for="editCourseDescription">Description</label>
+                    <textarea id="editCourseDescription" maxlength="500" placeholder="Optional – add details for students"></textarea>
+                </div>
+                <div class="form-row">
+                    <label for="editDocsRepoUrl">Course Documentation URL</label>
+                    <input type="url" id="editDocsRepoUrl" placeholder="http://localhost:3030/docs/esp32_basic/site/">
+                    <small>Full URL to course documentation (e.g., http://localhost:3030/docs/course_name/site/ or https://user.github.io/repo/)</small>
+                </div>
+                <div class="form-row">
+                    <label for="editDocsBranch">Documentation Branch (optional)</label>
+                    <input type="text" id="editDocsBranch" placeholder="main">
+                    <small>Only used for GitHub repository URLs</small>
+                </div>
+                <div class="form-row">
+                    <label for="editCoursePasskey">Course Passkey (leave empty to keep current)</label>
+                    <input type="text" id="editCoursePasskey" minlength="4" maxlength="32" placeholder="Enter new passkey or leave empty">
+                    <small>⚠️ Changing the passkey will require students to re-enroll with the new one</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeEditCourseModal()">Cancel</button>
+                    <button type="submit" class="save-btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 </html>

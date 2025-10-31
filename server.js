@@ -14,7 +14,9 @@ const app = express();
 
 // Configuration
 const PORT = process.env.PORT || 3030;
-const HOST = process.env.HOST || '127.0.0.1';
+// Default to 0.0.0.0 in production to allow external connections
+// Use 127.0.0.1 only in development for security
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const BASE_URL = process.env.BASE_URL || `http://${HOST}:${PORT}`;
 const DB_PATH = path.join(__dirname, 'database.sqlite');
@@ -1292,6 +1294,16 @@ const updateCourseInDB = (courseId, teacherId, fields) => {
             params.push(fields.description);
         }
 
+        if (Object.prototype.hasOwnProperty.call(fields, 'docs_repo_url')) {
+            updates.push('docs_repo_url = ?');
+            params.push(fields.docs_repo_url);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(fields, 'docs_branch')) {
+            updates.push('docs_branch = ?');
+            params.push(fields.docs_branch);
+        }
+
         if (Object.prototype.hasOwnProperty.call(fields, 'access_code_hash')) {
             updates.push('access_code_hash = ?');
             params.push(fields.access_code_hash);
@@ -1710,7 +1722,7 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Course not found or access denied' });
         }
 
-        const { title, description, access_code } = req.body || {};
+        const { title, description, access_code, docs_repo_url, docs_branch } = req.body || {};
 
         const updateFields = {};
 
@@ -1724,6 +1736,14 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
 
         if (typeof description !== 'undefined') {
             updateFields.description = String(description || '').trim();
+        }
+
+        if (typeof docs_repo_url !== 'undefined') {
+            updateFields.docs_repo_url = docs_repo_url ? String(docs_repo_url).trim() : null;
+        }
+
+        if (typeof docs_branch !== 'undefined') {
+            updateFields.docs_branch = docs_branch ? String(docs_branch).trim() : 'main';
         }
 
         if (typeof access_code !== 'undefined') {

@@ -1427,26 +1427,28 @@
                     docsContainer.classList.remove('hidden');
                     if (docsControls) docsControls.style.display = 'flex';
                     
-                    // Construct documentation URL (GitHub Pages or hosted MkDocs site)
+                    // Construct documentation URL
                     let docsUrl = courseData.docs_repo_url;
                     
                     // Convert localhost URLs to use current host/baseUrl
-                    if (docsUrl.includes('localhost:3030')) {
-                        docsUrl = docsUrl.replace('http://localhost:3030', baseUrl);
+                    if (docsUrl.includes('localhost:3030') || docsUrl.includes('localhost') || docsUrl.includes('127.0.0.1')) {
+                        docsUrl = docsUrl.replace(/http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, baseUrl);
                     }
                     
-                    // If it's a GitHub repo URL, convert to GitHub Pages URL
-                    if (docsUrl.includes('github.com')) {
-                        const repoPath = docsUrl.replace('https://github.com/', '');
+                    // If it's a GitHub repo URL (not GitHub Pages), convert to GitHub Pages URL
+                    if (docsUrl.includes('github.com') && !docsUrl.includes('github.io')) {
+                        const repoPath = docsUrl.replace('https://github.com/', '').replace('.git', '');
                         const [owner, repo] = repoPath.split('/');
-                        docsUrl = `https://${owner}.github.io/${repo}/`;
-                        
-                        // Add branch/path if specified
-                        if (courseData.docs_branch && courseData.docs_branch !== 'main') {
-                            docsUrl += `${courseData.docs_branch}/`;
-                        }
-                        if (courseData.docs_path) {
-                            docsUrl += courseData.docs_path;
+                        if (owner && repo) {
+                            docsUrl = `https://${owner}.github.io/${repo}/`;
+                            
+                            // Add branch/path if specified
+                            if (courseData.docs_branch && courseData.docs_branch !== 'main') {
+                                docsUrl += `${courseData.docs_branch}/`;
+                            }
+                            if (courseData.docs_path) {
+                                docsUrl += courseData.docs_path;
+                            }
                         }
                     }
                     
