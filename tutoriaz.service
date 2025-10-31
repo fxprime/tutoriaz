@@ -7,7 +7,7 @@ After=network.target
 Type=simple
 User=YOUR_USERNAME
 Group=YOUR_USERNAME
-WorkingDirectory=/path/to/tutoriaz
+WorkingDirectory=/opt/tutoriaz
 
 # Environment variables
 Environment=NODE_ENV=production
@@ -18,12 +18,12 @@ Environment=JWT_SECRET=your-secure-secret-key-change-this
 Environment=DB_PATH=/var/lib/tutoriaz/database.sqlite
 
 # Alternative: Load from environment file
-# EnvironmentFile=/path/to/tutoriaz/.env
+# EnvironmentFile=/opt/tutoriaz/.env
 
 # Start script
-ExecStart=/usr/bin/node /path/to/tutoriaz/server.js
+ExecStart=/usr/bin/node /opt/tutoriaz/server.js
 # Or use the startup script:
-# ExecStart=/bin/bash /path/to/tutoriaz/start.sh
+# ExecStart=/bin/bash /opt/tutoriaz/start.sh
 
 # Restart policy
 Restart=always
@@ -39,7 +39,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/path/to/tutoriaz
+ReadWritePaths=/opt/tutoriaz
 
 [Install]
 WantedBy=multi-user.target
