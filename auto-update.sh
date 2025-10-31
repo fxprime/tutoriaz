@@ -52,7 +52,25 @@ git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
 
 # Update submodules (for course documentation)
 log "Updating git submodules..."
-git submodule update --recursive --remote 2>&1 | tee -a "$LOG_FILE"
+git submodule update --init --recursive --remote 2>&1 | tee -a "$LOG_FILE"
+
+# Build MkDocs documentation if mkdocs.yml exists
+log "Building course documentation..."
+for course_dir in "$REPO_DIR/courses"/*; do
+    if [ -d "$course_dir" ] && [ -f "$course_dir/mkdocs.yml" ]; then
+        course_name=$(basename "$course_dir")
+        log "Building docs for course: $course_name"
+        cd "$course_dir"
+        if command -v mkdocs &> /dev/null; then
+            mkdocs build 2>&1 | tee -a "$LOG_FILE"
+            log "✓ Documentation built for $course_name"
+        else
+            log "⚠ MkDocs not installed. Skipping build for $course_name"
+            log "  Install with: pip install mkdocs mkdocs-material"
+        fi
+        cd "$REPO_DIR"
+    fi
+done
 
 # Install/update dependencies
 log "Installing dependencies..."
