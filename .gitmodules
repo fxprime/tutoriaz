@@ -4,3 +4,6 @@
 [submodule "courses/esp32_basic"]
 	path = courses/esp32_basic
 	url = https://github.com/fxprime/course_esp32_basic.git
+[submodule "courses/iot_basic_course"]
+	path = courses/iot_basic_course
+	url = https://github.com/fxprime/iot_basic_course.git
