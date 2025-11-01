@@ -2101,7 +2101,6 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
                     u.id,
                     u.username,
                     u.display_name,
-                    u.email,
                     u.created_at as user_created_at,
                     e.enrolled_at,
                     e.first_viewed_at,
@@ -2259,16 +2258,16 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
         
         if (mode === 'full') {
             // Full data export with all database fields
-            csv = 'User ID,Username,Display Name,Email,Enrolled At,First Viewed At,Total Score,Answered,Correct,Incorrect,Timeout,Time Spent (seconds),Percentile,Quiz ID,Quiz Title,Status,Answer,Correct Answer,Points,Answered At\n';
+            csv = 'User ID,Username,Display Name,Enrolled At,First Viewed At,Total Score,Answered,Correct,Incorrect,Timeout,Time Spent (seconds),Percentile,Quiz ID,Quiz Title,Status,Answer,Correct Answer,Points,Answered At\n';
             
             Object.values(studentStats).forEach(student => {
                 if (student.quiz_responses.length === 0) {
                     // Student with no responses
-                    csv += `${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.email || '')},${escapeCSV(student.enrolled_at || '')},${escapeCSV(student.first_viewed_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0},,,,,,\n`;
+                    csv += `${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.enrolled_at || '')},${escapeCSV(student.first_viewed_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0},,,,,,\n`;
                 } else {
                     // One row per quiz response
                     student.quiz_responses.forEach(response => {
-                        csv += `${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.email || '')},${escapeCSV(student.enrolled_at || '')},${escapeCSV(student.first_viewed_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0},${escapeCSV(response.quiz_id)},${escapeCSV(response.quiz_title)},${escapeCSV(response.status)},${escapeCSV(response.answer)},${escapeCSV(response.correct_answer || '')},${response.points || 0},${escapeCSV(response.answered_at || '')}\n`;
+                        csv += `${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.enrolled_at || '')},${escapeCSV(student.first_viewed_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0},${escapeCSV(response.quiz_id)},${escapeCSV(response.quiz_title)},${escapeCSV(response.status)},${escapeCSV(response.answer)},${escapeCSV(response.correct_answer || '')},${response.points || 0},${escapeCSV(response.answered_at || '')}\n`;
                     });
                 }
             });
