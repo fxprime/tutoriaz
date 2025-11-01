@@ -2094,6 +2094,17 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
             return res.status(404).json({ error: 'Course not found or access denied' });
         }
 
+        // Get teacher info
+        const teacher = await new Promise((resolve, reject) => {
+            db.get('SELECT username, display_name FROM users WHERE id = ?', [course.created_by], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        const teacherName = teacher ? (teacher.display_name || teacher.username) : 'Unknown';
+        const courseName = course.title || 'Unknown Course';
+
         // Get all enrolled students with basic info
         const students = await new Promise((resolve, reject) => {
             const query = `
@@ -2102,9 +2113,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
                     u.username,
                     u.display_name,
                     u.created_at as user_created_at,
-                    e.enrolled_at,
-                    e.first_viewed_at,
-                    e.completed_at
+                    e.enrolled_at
                 FROM course_enrollments e
                 JOIN users u ON e.student_id = u.id
                 WHERE e.course_id = ?
@@ -2129,7 +2138,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
                 q.correct_answer,
                 q.points,
                 q.is_scored,
-                qp.started_at as push_started_at
+                qp.pushed_at as push_started_at
             FROM quiz_responses qr
             JOIN quizzes q ON qr.quiz_id = q.id
             JOIN quiz_pushes qp ON qr.push_id = qp.id
@@ -2148,14 +2157,14 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
         // Get attendance data
         const attendanceQuery = `
             SELECT 
-                user_id,
+                student_id as user_id,
                 status,
                 started_at,
                 ended_at,
-                duration_seconds
+                last_status_at
             FROM course_attendance_sessions
             WHERE course_id = ?
-            ORDER BY user_id, started_at
+            ORDER BY student_id, started_at
         `;
 
         const attendanceData = await new Promise((resolve, reject) => {
@@ -2176,8 +2185,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
                 correct_count: 0,
                 incorrect_count: 0,
                 timeout_count: 0,
-                total_time_spent: 0,
-                quiz_responses: []
+                total_time_spent: 0
             };
         });
 
@@ -2218,27 +2226,19 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
             } else if (response.status === 'timeout') {
                 stats.timeout_count++;
             }
-
-            // Store full response for "full" mode
-            if (mode === 'full') {
-                stats.quiz_responses.push({
-                    quiz_id: response.quiz_id,
-                    quiz_title: response.quiz_title,
-                    status: response.status,
-                    answer: formatAnswerForDisplay(parseStoredAnswer(response.answer_text)),
-                    correct_answer: response.correct_answer,
-                    points: response.points,
-                    is_scored: response.is_scored,
-                    answered_at: response.answered_at,
-                    push_started_at: response.push_started_at
-                });
-            }
         });
 
-        // Calculate attendance time
+        // Calculate attendance time - calculate duration from timestamps
         attendanceData.forEach(session => {
             if (studentStats[session.user_id]) {
-                studentStats[session.user_id].total_time_spent += session.duration_seconds || 0;
+                // Calculate duration in seconds from started_at to ended_at or last_status_at
+                const startTime = new Date(session.started_at);
+                const endTime = session.ended_at ? new Date(session.ended_at) : new Date(session.last_status_at);
+                const durationSeconds = Math.floor((endTime - startTime) / 1000);
+                
+                if (durationSeconds > 0) {
+                    studentStats[session.user_id].total_time_spent += durationSeconds;
+                }
             }
         });
 
@@ -2257,33 +2257,26 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
         let csv = '';
         
         if (mode === 'full') {
-            // Full data export with all database fields
-            csv = 'User ID,Username,Display Name,Enrolled At,First Viewed At,Total Score,Answered,Correct,Incorrect,Timeout,Time Spent (seconds),Percentile,Quiz ID,Quiz Title,Status,Answer,Correct Answer,Points,Answered At\n';
+            // Full data export - simplified with essential fields only
+            csv = 'Course,Teacher,User ID,Username,Display Name,Enrolled At,Total Score,Answered,Correct,Incorrect,Timeout,Time Spent (seconds),Percentile\n';
             
             Object.values(studentStats).forEach(student => {
-                if (student.quiz_responses.length === 0) {
-                    // Student with no responses
-                    csv += `${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.enrolled_at || '')},${escapeCSV(student.first_viewed_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0},,,,,,\n`;
-                } else {
-                    // One row per quiz response
-                    student.quiz_responses.forEach(response => {
-                        csv += `${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.enrolled_at || '')},${escapeCSV(student.first_viewed_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0},${escapeCSV(response.quiz_id)},${escapeCSV(response.quiz_title)},${escapeCSV(response.status)},${escapeCSV(response.answer)},${escapeCSV(response.correct_answer || '')},${response.points || 0},${escapeCSV(response.answered_at || '')}\n`;
-                    });
-                }
+                csv += `${escapeCSV(courseName)},${escapeCSV(teacherName)},${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.enrolled_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0}\n`;
             });
         } else {
-            // Basic export - one row per student
-            csv = 'Name,Username,Enrolled At,Time Spent (min),Total Score,Answered,Correct,Incorrect,Percentile\n';
+            // Basic export - one row per student with summary
+            csv = 'Course,Teacher,Name,Username,Enrolled At,Time Spent (min),Total Score,Answered,Correct,Incorrect,Percentile\n';
             
             Object.values(studentStats).forEach(student => {
                 const timeMinutes = Math.round(student.total_time_spent / 60);
-                csv += `${escapeCSV(student.display_name || student.username)},${escapeCSV(student.username)},${escapeCSV(student.enrolled_at || '')},${timeMinutes},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.percentile || 0}\n`;
+                csv += `${escapeCSV(courseName)},${escapeCSV(teacherName)},${escapeCSV(student.display_name || student.username)},${escapeCSV(student.username)},${escapeCSV(student.enrolled_at || '')},${timeMinutes},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.percentile || 0}\n`;
             });
         }
 
         // Set headers for file download
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-        const filename = `${course.title.replace(/[^a-z0-9]/gi, '_')}_students_${mode}_${timestamp}.csv`;
+        const cleanTitle = course.title.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+        const filename = `${cleanTitle}_students_${mode}_${timestamp}.csv`;
         
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

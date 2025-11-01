@@ -1675,7 +1675,7 @@
                 const contentDisposition = response.headers.get('Content-Disposition');
                 let filename = `student_export_${mode}.csv`;
                 if (contentDisposition) {
-                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+                    const filenameMatch = contentDisposition.match(/filename="([^"]+)"/i);
                     if (filenameMatch) {
                         filename = filenameMatch[1];
                     }
@@ -3250,12 +3250,12 @@
                 <div style="display: grid; gap: 15px;">
                     <button class="btn btn-primary" onclick="exportCSV('basic')" style="padding: 15px; text-align: left;">
                         <strong>📊 Basic Export</strong><br>
-                        <small style="color: #6b7280;">Name, username, enrolled date, time spent, score, answers, and percentile</small>
+                        <small style="color: #6b7280;">Course, teacher, name, username, enrolled date, time spent (min), score, answers, and percentile</small>
                     </button>
                     
                     <button class="btn btn-success" onclick="exportCSV('full')" style="padding: 15px; text-align: left;">
                         <strong>📁 Full Export</strong><br>
-                        <small style="color: #6b7280;">All database fields including detailed quiz responses and timestamps</small>
+                        <small style="color: #6b7280;">All fields including user ID, detailed statistics, time spent (seconds), and timeout counts</small>
                     </button>
                 </div>
                 
