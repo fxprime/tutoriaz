@@ -856,6 +856,7 @@
                 <p id="teacherActiveCourseMeta" class="course-meta-line"></p>
             </div>
             <div style="display: flex; gap: 10px;">
+                <button class="btn btn-success" onclick="showExportModal()" style="padding: 8px 16px;">📥 Export CSV</button>
                 <button class="btn btn-info" onclick="showStudentScores()" style="padding: 8px 16px;">📊 View Student Scores</button>
                 <button class="back-to-lobby-btn" onclick="returnToTeacherLobby()">Back to Lobby</button>
             </div>
@@ -1626,6 +1627,79 @@
             document.getElementById('editCourseForm').reset();
         }
 
+        // CSV Export Functions
+        function showExportModal() {
+            if (!selectedCourseId) {
+                showNotification('Please select a course first', 'error');
+                return;
+            }
+            document.getElementById('exportCsvModal').classList.remove('hidden');
+        }
+
+        function closeExportModal() {
+            document.getElementById('exportCsvModal').classList.add('hidden');
+        }
+
+        async function exportCSV(mode) {
+            if (!selectedCourseId) {
+                showNotification('No course selected', 'error');
+                return;
+            }
+
+            try {
+                closeExportModal();
+                showNotification(`Generating ${mode} export...`, 'info');
+
+                const response = await fetch(`/api/courses/${selectedCourseId}/export-csv?mode=${mode}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Failed to generate CSV export');
+                }
+
+                // Get the blob from the response
+                const blob = await response.blob();
+                
+                // Create a download link and trigger it
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // Extract filename from Content-Disposition header if available
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `student_export_${mode}.csv`;
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showNotification('CSV export downloaded successfully', 'success');
+            } catch (error) {
+                console.error('Export CSV error:', error);
+                showNotification(error.message || 'Failed to export CSV', 'error');
+            }
+        }
+
+        window.showExportModal = showExportModal;
+        window.closeExportModal = closeExportModal;
+        window.exportCSV = exportCSV;
+
         async function handleEditCourse(event) {
             event.preventDefault();
 
@@ -1774,6 +1848,15 @@
                     editModal.addEventListener('click', (e) => {
                         if (e.target === editModal) {
                             closeEditCourseModal();
+                        }
+                    });
+                }
+
+                const exportModal = document.getElementById('exportCsvModal');
+                if (exportModal) {
+                    exportModal.addEventListener('click', (e) => {
+                        if (e.target === exportModal) {
+                            closeExportModal();
                         }
                     });
                 }
@@ -3151,6 +3234,35 @@
                     <button type="submit" class="save-btn">Save Changes</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- CSV Export Modal -->
+    <div id="exportCsvModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Export Student Data</h2>
+                <button class="modal-close" onclick="closeExportModal()">&times;</button>
+            </div>
+            <div style="padding: 20px;">
+                <p style="margin-bottom: 20px; color: #4b5563;">Choose the export format for student data:</p>
+                
+                <div style="display: grid; gap: 15px;">
+                    <button class="btn btn-primary" onclick="exportCSV('basic')" style="padding: 15px; text-align: left;">
+                        <strong>📊 Basic Export</strong><br>
+                        <small style="color: #6b7280;">Name, username, enrolled date, time spent, score, answers, and percentile</small>
+                    </button>
+                    
+                    <button class="btn btn-success" onclick="exportCSV('full')" style="padding: 15px; text-align: left;">
+                        <strong>📁 Full Export</strong><br>
+                        <small style="color: #6b7280;">All database fields including detailed quiz responses and timestamps</small>
+                    </button>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <button type="button" class="btn" onclick="closeExportModal()" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                </div>
+            </div>
         </div>
     </div>
 </body>
