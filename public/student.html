@@ -362,8 +362,25 @@
             background-color: #e3f2fd;
             border-color: #007bff;
         }
-        .option-item input[type="radio"] {
+        .option-item input[type="radio"],
+        .option-item input[type="checkbox"] {
             margin-right: 10px;
+            cursor: pointer;
+        }
+        .option-item label {
+            cursor: pointer;
+            flex: 1;
+        }
+        .option-item label p {
+            margin: 0;
+            display: inline;
+        }
+        .option-item label code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
         }
         .quiz-actions {
             display: flex;
@@ -678,7 +695,146 @@
             line-height: 1.6;
             margin-bottom: 16px;
         }
+
+        /* Answers Modal */
+        .answers-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(17, 24, 39, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5000;
+            padding: 20px;
+        }
+        .answers-modal-overlay.hidden {
+            display: none;
+        }
+        .answers-modal {
+            background: #ffffff;
+            border-radius: 12px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px rgba(15, 23, 42, 0.35);
+        }
+        .answers-modal-header {
+            padding: 24px 28px;
+            border-bottom: 2px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .answers-modal-header h2 {
+            margin: 0;
+            font-size: 22px;
+            color: #111827;
+        }
+        .answers-modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .answers-modal-close:hover {
+            color: #111827;
+        }
+        .answers-modal-body {
+            padding: 24px 28px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .answer-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 16px;
+        }
+        .answer-item.correct {
+            background: #d1fae5;
+            border-color: #6ee7b7;
+        }
+        .answer-item.incorrect {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+        .answer-item.timeout {
+            background: #fef3c7;
+            border-color: #fcd34d;
+        }
+        .answer-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+        .answer-item-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+            flex: 1;
+        }
+        .answer-item-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .answer-item-badge.correct {
+            background: #10b981;
+            color: white;
+        }
+        .answer-item-badge.incorrect {
+            background: #ef4444;
+            color: white;
+        }
+        .answer-item-badge.timeout {
+            background: #f59e0b;
+            color: white;
+        }
+        .answer-item-content {
+            font-size: 14px;
+            color: #4b5563;
+            margin-bottom: 10px;
+        }
+        .answer-row {
+            display: grid;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .answer-label {
+            font-weight: 600;
+            color: #374151;
+            font-size: 13px;
+        }
+        .answer-value {
+            color: #1f2937;
+            font-size: 14px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+        }
+        .answer-item.correct .answer-value {
+            border-color: #6ee7b7;
+        }
+        .answer-item.incorrect .answer-value {
+            border-color: #fca5a5;
+        }
     </style>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -2017,6 +2173,120 @@
                 console.log('Reconnected, requesting current queue');
                 socket.emit('get_my_queue');
             });
+
+            socket.on('show_answers', (data) => {
+                console.log('Received show_answers:', data);
+                showAnswersModal(data);
+            });
+        }
+
+        // Show Answers Modal
+        function showAnswersModal(data) {
+            const modal = document.getElementById('answersModal');
+            const body = document.getElementById('answersModalBody');
+            
+            if (!modal || !body) return;
+
+            const results = data.results || [];
+            const courseTitle = data.course_title || 'Course';
+
+            if (results.length === 0) {
+                body.innerHTML = `
+                    <div style="text-align: center; padding: 40px 20px; color: #6b7280;">
+                        <p style="font-size: 16px;">No quiz results available for ${escapeHtml(courseTitle)}</p>
+                    </div>
+                `;
+            } else {
+                let correctCount = 0;
+                let totalScored = 0;
+
+                results.forEach(item => {
+                    if (item.is_scored) {
+                        totalScored++;
+                        if (item.is_correct) correctCount++;
+                    }
+                });
+
+                let summaryHtml = '';
+                if (totalScored > 0) {
+                    const percentage = Math.round((correctCount / totalScored) * 100);
+                    summaryHtml = `
+                        <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                            <div style="font-size: 18px; font-weight: 600; color: #1e40af; margin-bottom: 8px;">
+                                📊 Your Score: ${correctCount}/${totalScored} (${percentage}%)
+                            </div>
+                            <div style="font-size: 14px; color: #3b82f6;">
+                                Course: ${escapeHtml(courseTitle)}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const itemsHtml = results.map(item => {
+                    let statusClass = 'timeout';
+                    let badgeText = 'Timeout';
+                    let badgeClass = 'timeout';
+
+                    if (item.status === 'answered') {
+                        if (item.is_correct) {
+                            statusClass = 'correct';
+                            badgeText = item.is_scored ? `✓ Correct (+${item.points} pts)` : '✓ Correct';
+                            badgeClass = 'correct';
+                        } else {
+                            statusClass = 'incorrect';
+                            badgeText = item.is_scored ? '✗ Incorrect' : '— Not Graded';
+                            badgeClass = 'incorrect';
+                        }
+                    }
+
+                    let contentHtml = '';
+                    if (item.quiz_content) {
+                        try {
+                            // Render markdown for quiz content
+                            contentHtml = `<div class="answer-item-content">${marked.parse(item.quiz_content)}</div>`;
+                        } catch (e) {
+                            // Fallback to escaped HTML if markdown parsing fails
+                            contentHtml = `<div class="answer-item-content">${escapeHtml(item.quiz_content)}</div>`;
+                        }
+                    }
+
+                    return `
+                        <div class="answer-item ${statusClass}">
+                            <div class="answer-item-header">
+                                <div class="answer-item-title">${escapeHtml(item.quiz_title)}</div>
+                                <span class="answer-item-badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            ${contentHtml}
+                            <div class="answer-row">
+                                <div class="answer-label">Your Answer:</div>
+                                <div class="answer-value">${escapeHtml(item.your_answer)}</div>
+                            </div>
+                            <div class="answer-row">
+                                <div class="answer-label">Correct Answer:</div>
+                                <div class="answer-value">${escapeHtml(item.correct_answer)}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                body.innerHTML = summaryHtml + itemsHtml;
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeAnswersModal() {
+            const modal = document.getElementById('answersModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Update connection status
@@ -2082,7 +2352,16 @@
             
             // Update quiz title with queue position if available
             updateQuizOverlayHeader();
-            document.getElementById('quizQuestion').textContent = quizData.quiz.content_text || '';
+            
+            // Render question content with markdown support
+            const questionContent = quizData.quiz.content_text || '';
+            const questionElement = document.getElementById('quizQuestion');
+            try {
+                questionElement.innerHTML = marked.parse(questionContent);
+            } catch (e) {
+                // Fallback if markdown parsing fails
+                questionElement.textContent = questionContent;
+            }
 
             if (queueSnapshot.currentQuiz && queueSnapshot.currentQuiz.push_id === quizData.push_id) {
                 queueSnapshot.currentQuiz = {
@@ -2134,6 +2413,26 @@
             const selectAnswers = document.getElementById('selectAnswers');
             const answerLabel = document.getElementById('answerLabel');
             
+            // Parse options if they come as a string
+            let options = quiz.options;
+            if (typeof options === 'string') {
+                try {
+                    options = JSON.parse(options);
+                } catch (e) {
+                    console.error('Failed to parse options:', e);
+                    options = [];
+                }
+            }
+            if (!Array.isArray(options)) {
+                options = [];
+            }
+            
+            console.log('setupAnswerInterface called with:', {
+                question_type: quiz.question_type,
+                options: options,
+                optionsLength: options.length
+            });
+            
             // Always re-enable inputs before configuring
             textAnswer.disabled = false;
             textAnswer.style.opacity = '';
@@ -2149,13 +2448,55 @@
                 selectAnswers.classList.remove('hidden');
                 answerLabel.textContent = 'Choose your answer:';
                 
-                // Create options
-                selectAnswers.innerHTML = quiz.options.map((option, index) => `
-                    <div class="option-item" onclick="selectOption(${index})">
-                        <input type="radio" name="quizOption" value="${index}" id="option${index}">
-                        <label for="option${index}">${option}</label>
-                    </div>
-                `).join('');
+                // Create radio options with markdown rendering
+                selectAnswers.innerHTML = options.map((option, index) => {
+                    let renderedOption;
+                    try {
+                        renderedOption = marked.parse(option);
+                    } catch (e) {
+                        renderedOption = escapeHtml(option);
+                    }
+                    return `
+                        <div class="option-item" onclick="selectOption(${index})">
+                            <input type="radio" name="quizOption" value="${index}" id="option${index}">
+                            <label for="option${index}">${renderedOption}</label>
+                        </div>
+                    `;
+                }).join('');
+            } else if (quiz.question_type === 'checkbox') {
+                textAnswer.classList.add('hidden');
+                selectAnswers.classList.remove('hidden');
+                answerLabel.textContent = 'Select all that apply:';
+                
+                // Create checkbox options with markdown rendering
+                selectAnswers.innerHTML = options.map((option, index) => {
+                    let renderedOption;
+                    try {
+                        renderedOption = marked.parse(option);
+                    } catch (e) {
+                        renderedOption = escapeHtml(option);
+                    }
+                    return `
+                        <div class="option-item" onclick="toggleCheckboxOption(${index})">
+                            <input type="checkbox" name="quizOption" value="${index}" id="option${index}">
+                            <label for="option${index}">${renderedOption}</label>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleCheckboxOption(index) {
+            const checkbox = document.getElementById(`option${index}`);
+            if (checkbox && !checkbox.disabled) {
+                checkbox.checked = !checkbox.checked;
+                checkbox.parentElement.classList.toggle('selected', checkbox.checked);
             }
         }
 
@@ -2179,9 +2520,9 @@
                 item.classList.remove('selected');
             });
 
-            document.querySelectorAll('input[name="quizOption"]').forEach(radio => {
-                radio.disabled = false;
-                radio.checked = false;
+            document.querySelectorAll('input[name="quizOption"]').forEach(input => {
+                input.disabled = false;
+                input.checked = false;
             });
         }
 
@@ -2327,6 +2668,16 @@
                     selected_index: optionIndex,
                     selected_text: currentQuiz.quiz.options[optionIndex]
                 };
+            } else if (currentQuiz.quiz.question_type === 'checkbox') {
+                const selectedOptions = Array.from(document.querySelectorAll('input[name="quizOption"]:checked'));
+                if (selectedOptions.length === 0) {
+                    showQuizMessage('Please select at least one option', 'error');
+                    return;
+                }
+                answer = selectedOptions.map(checkbox => {
+                    const optionIndex = parseInt(checkbox.value);
+                    return currentQuiz.quiz.options[optionIndex];
+                });
             }
             
             // Send answer to server
@@ -2636,5 +2987,18 @@
         // Initialize configuration on page load
         fetchAppConfig();
     </script>
+
+    <!-- Answers Modal -->
+    <div id="answersModal" class="answers-modal-overlay hidden">
+        <div class="answers-modal">
+            <div class="answers-modal-header">
+                <h2>📋 Quiz Results</h2>
+                <button class="answers-modal-close" onclick="closeAnswersModal()">&times;</button>
+            </div>
+            <div class="answers-modal-body" id="answersModalBody">
+                <!-- Answer items will be inserted here -->
+            </div>
+        </div>
+    </div>
 </body>
 </html>

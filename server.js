@@ -831,6 +831,14 @@ function formatAnswerForDisplay(value) {
     if (typeof value === 'number' || typeof value === 'boolean') {
         return String(value);
     }
+    // Handle select type answers (object with selected_text)
+    if (typeof value === 'object' && value.selected_text) {
+        return value.selected_text;
+    }
+    // Handle checkbox type answers (array of strings)
+    if (Array.isArray(value)) {
+        return value.join(', ');
+    }
     return JSON.stringify(value);
 }
 
@@ -1656,6 +1664,87 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
+// Update user profile (display name and/or password)
+app.put('/api/profile', authenticateToken, async (req, res) => {
+    try {
+        const { display_name, password, current_password } = req.body || {};
+        const userId = req.user.userId;
+
+        // Get current user data
+        const user = await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM users WHERE id = ?', [userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // If changing password, verify current password first
+        if (password) {
+            if (!current_password) {
+                return res.status(400).json({ error: 'Current password required to change password' });
+            }
+
+            const validPassword = await bcrypt.compare(current_password, user.password_hash);
+            if (!validPassword) {
+                return res.status(401).json({ error: 'Current password is incorrect' });
+            }
+
+            if (password.length < 6) {
+                return res.status(400).json({ error: 'New password must be at least 6 characters' });
+            }
+        }
+
+        // Build update query dynamically
+        const updates = [];
+        const params = [];
+
+        if (display_name !== undefined && String(display_name).trim()) {
+            updates.push('display_name = ?');
+            params.push(String(display_name).trim());
+        }
+
+        if (password) {
+            const hash = await bcrypt.hash(password, 10);
+            updates.push('password_hash = ?');
+            params.push(hash);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No updates provided' });
+        }
+
+        params.push(userId);
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+                params,
+                (err) => (err ? reject(err) : resolve())
+            );
+        });
+
+        // Fetch updated user
+        const updatedUser = await new Promise((resolve, reject) => {
+            db.get('SELECT id, username, display_name, role FROM users WHERE id = ?', [userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        res.json({
+            message: 'Profile updated successfully',
+            user: updatedUser
+        });
+    } catch (error) {
+        console.error('Profile update error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Create course (teacher only)
 app.post('/api/courses', authenticateToken, async (req, res) => {
     try {
@@ -2464,6 +2553,146 @@ app.get('/api/courses/:courseId/scores', authenticateToken, async (req, res) => 
     } catch (error) {
         console.error('Get course scores error:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Push quiz answers to students (teacher only)
+app.post('/api/courses/:courseId/push-answers', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { courseId } = req.params;
+        const course = await getCourseById(courseId);
+        if (!course || course.created_by !== req.user.userId) {
+            return res.status(404).json({ error: 'Course not found or access denied' });
+        }
+
+        // Get all students enrolled in this course
+        const students = await new Promise((resolve, reject) => {
+            db.all(
+                'SELECT student_id FROM course_enrollments WHERE course_id = ?',
+                [courseId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        if (students.length === 0) {
+            return res.json({ message: 'No students enrolled', pushed_to: 0 });
+        }
+
+        // Get all quiz responses for students in this course
+        const responsesQuery = `
+            SELECT 
+                qr.user_id,
+                qr.quiz_id,
+                qr.answer_text,
+                qr.status,
+                qr.answered_at,
+                q.title as quiz_title,
+                q.content_text as quiz_content,
+                q.correct_answer,
+                q.question_type,
+                q.points,
+                q.is_scored
+            FROM quiz_responses qr
+            JOIN quizzes q ON qr.quiz_id = q.id
+            JOIN quiz_pushes qp ON qr.push_id = qp.id
+            WHERE q.course_id = ?
+              AND (qp.undone_at IS NULL OR qp.undone_at = '')
+              AND qr.status != 'ignored'
+            ORDER BY qr.answered_at
+        `;
+
+        const allResponses = await new Promise((resolve, reject) => {
+            db.all(responsesQuery, [courseId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        // Group responses by student
+        const studentResults = {};
+        students.forEach(s => {
+            studentResults[s.student_id] = [];
+        });
+
+        allResponses.forEach(response => {
+            if (!studentResults[response.user_id]) return;
+
+            const answerValue = parseStoredAnswer(response.answer_text);
+            const correctValue = parseStoredAnswer(response.correct_answer);
+            
+            let isCorrect = false;
+            let studentAnswer = formatAnswerForDisplay(answerValue);
+            let correctAnswer = formatAnswerForDisplay(correctValue);
+
+            // Check correctness for scored quizzes
+            if (response.is_scored && response.correct_answer) {
+                if (response.question_type === 'select' && answerValue && typeof answerValue === 'object') {
+                    // Single choice - extract selected_text and compare
+                    const selectedText = answerValue.selected_text || '';
+                    const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
+                    const extractedAnswer = match ? match[1].trim() : selectedText.trim();
+                    isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
+                } else if (response.question_type === 'checkbox') {
+                    // Multiple choice - compare arrays
+                    if (Array.isArray(answerValue) && Array.isArray(correctValue)) {
+                        // Sort both arrays and compare
+                        const sortedAnswer = answerValue.map(a => String(a).toLowerCase().trim()).sort();
+                        const sortedCorrect = correctValue.map(c => String(c).toLowerCase().trim()).sort();
+                        isCorrect = JSON.stringify(sortedAnswer) === JSON.stringify(sortedCorrect);
+                    }
+                } else {
+                    // Text answer - direct comparison
+                    isCorrect = studentAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
+                }
+            }
+
+            studentResults[response.user_id].push({
+                quiz_title: response.quiz_title,
+                quiz_content: response.quiz_content,
+                your_answer: response.status === 'answered' ? studentAnswer : 'No answer (timeout)',
+                correct_answer: correctAnswer || 'Not graded',
+                is_correct: isCorrect,
+                status: response.status,
+                points: response.points || 0,
+                is_scored: response.is_scored,
+                answered_at: response.answered_at
+            });
+        });
+
+        // Emit to all students in the course
+        let pushedCount = 0;
+        students.forEach(student => {
+            // Find connected socket for this student
+            const connectedStudent = Array.from(connectedUsers.values())
+                .find(user => user.userId === student.student_id && user.role === 'student');
+            
+            if (connectedStudent) {
+                const socket = io.sockets.sockets.get(connectedStudent.socketId);
+                if (socket) {
+                    socket.emit('show_answers', {
+                        course_title: course.title,
+                        results: studentResults[student.student_id] || []
+                    });
+                    pushedCount++;
+                }
+            }
+        });
+
+        res.json({
+            message: 'Answers pushed to students',
+            pushed_to: pushedCount,
+            total_students: students.length
+        });
+    } catch (error) {
+        console.error('Push answers error:', error);
+        res.status(500).json({ error: 'Failed to push answers' });
     }
 });
 

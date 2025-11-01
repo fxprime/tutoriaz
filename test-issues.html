@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Profile and Courses</title>
+</head>
+<body>
+    <h1>Test Results</h1>
+    <div id="results"></div>
+
+    <script>
+        async function test() {
+            const results = document.getElementById('results');
+            
+            // Test 1: Login as teacher
+            results.innerHTML += '<h2>Test 1: Login</h2>';
+            try {
+                const loginRes = await fetch('http://127.0.0.1:3030/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'teacher', password: 'admin123' })
+                });
+                const loginData = await loginRes.json();
+                if (loginRes.ok) {
+                    results.innerHTML += '<p style="color: green;">✓ Login successful</p>';
+                    const token = loginData.token;
+                    
+                    // Test 2: Load courses
+                    results.innerHTML += '<h2>Test 2: Load Courses</h2>';
+                    const coursesRes = await fetch('http://127.0.0.1:3030/api/courses', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const coursesData = await coursesRes.json();
+                    if (coursesRes.ok) {
+                        results.innerHTML += `<p style="color: green;">✓ Courses loaded: ${coursesData.courses.length} courses</p>`;
+                        results.innerHTML += `<pre>${JSON.stringify(coursesData.courses, null, 2)}</pre>`;
+                    } else {
+                        results.innerHTML += `<p style="color: red;">✗ Load courses failed: ${coursesData.error}</p>`;
+                    }
+                    
+                    // Test 3: Update profile (display name only)
+                    results.innerHTML += '<h2>Test 3: Update Display Name</h2>';
+                    const profileRes = await fetch('http://127.0.0.1:3030/api/profile', {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ display_name: 'Test Teacher Updated' })
+                    });
+                    const profileData = await profileRes.json();
+                    if (profileRes.ok) {
+                        results.innerHTML += `<p style="color: green;">✓ Profile updated: ${profileData.user.display_name}</p>`;
+                    } else {
+                        results.innerHTML += `<p style="color: red;">✗ Profile update failed: ${profileData.error}</p>`;
+                    }
+                    
+                } else {
+                    results.innerHTML += `<p style="color: red;">✗ Login failed: ${loginData.error}</p>`;
+                }
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">✗ Error: ${error.message}</p>`;
+            }
+        }
+        
+        test();
+    </script>
+</body>
+</html>

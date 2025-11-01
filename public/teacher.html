@@ -38,6 +38,17 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        .profile-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .profile-btn:hover {
+            background-color: #5a6268;
+        }
         .teacher-lobby {
             max-width: 960px;
             margin: 30px auto;
@@ -793,6 +804,8 @@
             background: #1d4ed8;
         }
     </style>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -802,6 +815,7 @@
         </div>
         <div class="user-info">
             <span id="teacherName">Teacher</span>
+            <button class="profile-btn" onclick="showProfileModal()">⚙️ Profile</button>
             <button class="logout-btn" onclick="logout()">Logout</button>
         </div>
     </div>
@@ -857,6 +871,7 @@
             </div>
             <div style="display: flex; gap: 10px;">
                 <button class="btn btn-success" onclick="showExportModal()" style="padding: 8px 16px;">📥 Export CSV</button>
+                <button class="btn btn-primary" onclick="showPushAnswersConfirm()" style="padding: 8px 16px;">📋 Show Answers to Students</button>
                 <button class="btn btn-info" onclick="showStudentScores()" style="padding: 8px 16px;">📊 View Student Scores</button>
                 <button class="back-to-lobby-btn" onclick="returnToTeacherLobby()">Back to Lobby</button>
             </div>
@@ -872,24 +887,31 @@
                         <input type="text" id="quizTitle" required>
                     </div>
                     <div class="form-group">
-                        <label for="quizContent">Question/Content</label>
-                        <textarea id="quizContent" placeholder="Enter your question or content here..."></textarea>
+                        <label for="quizContent">Question/Content <small style="color: #6b7280;">(Markdown supported)</small></label>
+                        <textarea id="quizContent" placeholder="Enter your question or content here... (Markdown supported)"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="questionType">Question Type *</label>
                         <select id="questionType" required>
                             <option value="text">Text Answer</option>
-                            <option value="select">Multiple Choice</option>
+                            <option value="select">Multiple Choice (Single Selection)</option>
+                            <option value="checkbox">Multiple Choice (Multiple Selection)</option>
                         </select>
                     </div>
                     <div class="form-group hidden" id="optionsGroup">
                         <label for="quizOptions">Options (one per line)</label>
                         <textarea id="quizOptions" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group hidden" id="optionsPreviewGroup">
+                        <label>Select Correct Answer(s)</label>
+                        <div id="optionsPreview" style="background: #f9fafb; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                            <!-- Options preview will be rendered here -->
+                        </div>
+                    </div>
+                    <div class="form-group" id="textAnswerGroup">
                         <label for="correctAnswer">Correct Answer</label>
                         <input type="text" id="correctAnswer" placeholder="Enter the correct answer for grading">
-                        <small>For multiple choice, enter the exact option text</small>
+                        <small>For text questions, enter the expected answer</small>
                     </div>
                     <div class="form-group">
                         <label for="quizCategory">Category</label>
@@ -1700,6 +1722,138 @@
         window.closeExportModal = closeExportModal;
         window.exportCSV = exportCSV;
 
+        // Push Answers Functions
+        async function showPushAnswersConfirm() {
+            if (!selectedCourseId) {
+                showNotification('Please select a course first', 'error');
+                return;
+            }
+
+            if (confirm('Push quiz answers to all students?\n\nStudents will see:\n- Quiz questions\n- Their answers\n- Correct answers\n- Whether they got it right or wrong')) {
+                await pushAnswersToStudents();
+            }
+        }
+
+        async function pushAnswersToStudents() {
+            if (!selectedCourseId) {
+                return;
+            }
+
+            try {
+                showNotification('Pushing answers to students...', 'info');
+
+                const response = await fetch(`/api/courses/${selectedCourseId}/push-answers`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to push answers');
+                }
+
+                showNotification(`Answers pushed to ${data.pushed_to} of ${data.total_students} students`, 'success');
+            } catch (error) {
+                console.error('Push answers error:', error);
+                showNotification(error.message || 'Failed to push answers', 'error');
+            }
+        }
+
+        window.showPushAnswersConfirm = showPushAnswersConfirm;
+
+        // Profile Management Functions
+        function showProfileModal() {
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            document.getElementById('profileDisplayName').value = currentUser.display_name || currentUser.username || '';
+            document.getElementById('profileCurrentPassword').value = '';
+            document.getElementById('profileNewPassword').value = '';
+            document.getElementById('profileConfirmPassword').value = '';
+            document.getElementById('profileModal').classList.remove('hidden');
+        }
+
+        function closeProfileModal() {
+            document.getElementById('profileModal').classList.add('hidden');
+        }
+
+        async function handleProfileUpdate(event) {
+            event.preventDefault();
+
+            const displayName = document.getElementById('profileDisplayName').value.trim();
+            const currentPassword = document.getElementById('profileCurrentPassword').value;
+            const newPassword = document.getElementById('profileNewPassword').value;
+            const confirmPassword = document.getElementById('profileConfirmPassword').value;
+
+            if (!displayName) {
+                showNotification('Display name is required', 'error');
+                return;
+            }
+
+            // Validate password fields if changing password
+            if (newPassword || confirmPassword || currentPassword) {
+                if (!currentPassword) {
+                    showNotification('Current password is required to change password', 'error');
+                    return;
+                }
+
+                if (newPassword !== confirmPassword) {
+                    showNotification('New passwords do not match', 'error');
+                    return;
+                }
+
+                if (newPassword.length < 6) {
+                    showNotification('New password must be at least 6 characters', 'error');
+                    return;
+                }
+            }
+
+            try {
+                const updateData = {
+                    display_name: displayName
+                };
+
+                if (newPassword) {
+                    updateData.current_password = currentPassword;
+                    updateData.password = newPassword;
+                }
+
+                const response = await fetch('/api/profile', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to update profile');
+                }
+
+                // Update local storage with new user info
+                const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+                const updatedUser = { ...currentUser, ...data.user };
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+
+                // Update display name in the UI
+                document.getElementById('teacherName').textContent = data.user.display_name;
+
+                closeProfileModal();
+                showNotification('Profile updated successfully!', 'success');
+            } catch (error) {
+                console.error('Profile update error:', error);
+                showNotification(error.message || 'Failed to update profile', 'error');
+            }
+        }
+
+        window.showProfileModal = showProfileModal;
+        window.closeProfileModal = closeProfileModal;
+
         async function handleEditCourse(event) {
             event.preventDefault();
 
@@ -1861,6 +2015,20 @@
                     });
                 }
 
+                const profileModal = document.getElementById('profileModal');
+                if (profileModal) {
+                    profileModal.addEventListener('click', (e) => {
+                        if (e.target === profileModal) {
+                            closeProfileModal();
+                        }
+                    });
+                }
+
+                const profileForm = document.getElementById('profileForm');
+                if (profileForm) {
+                    profileForm.addEventListener('submit', handleProfileUpdate);
+                }
+
                 const generateButton = document.getElementById('generateLobbyPasskey');
                 if (generateButton) {
                     generateButton.addEventListener('click', () => {
@@ -1931,13 +2099,102 @@
 
         // Quiz form handling
         document.getElementById('questionType').addEventListener('change', function() {
+            const questionType = this.value;
             const optionsGroup = document.getElementById('optionsGroup');
-            if (this.value === 'select') {
+            const optionsPreviewGroup = document.getElementById('optionsPreviewGroup');
+            const textAnswerGroup = document.getElementById('textAnswerGroup');
+            
+            if (questionType === 'select' || questionType === 'checkbox') {
                 optionsGroup.classList.remove('hidden');
+                optionsPreviewGroup.classList.remove('hidden');
+                textAnswerGroup.classList.add('hidden');
             } else {
                 optionsGroup.classList.add('hidden');
+                optionsPreviewGroup.classList.add('hidden');
+                textAnswerGroup.classList.remove('hidden');
             }
+            
+            updateOptionsPreview();
         });
+
+        // Update options preview when options are changed
+        document.getElementById('quizOptions').addEventListener('input', updateOptionsPreview);
+
+        function updateOptionsPreview() {
+            const questionType = document.getElementById('questionType').value;
+            const optionsText = document.getElementById('quizOptions').value;
+            const previewContainer = document.getElementById('optionsPreview');
+            
+            if (questionType !== 'select' && questionType !== 'checkbox') {
+                return;
+            }
+            
+            const options = optionsText.split('\n').filter(opt => opt.trim());
+            
+            if (options.length === 0) {
+                previewContainer.innerHTML = '<p style="color: #6b7280; font-style: italic;">Enter options above to preview...</p>';
+                return;
+            }
+            
+            let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+            
+            if (questionType === 'select') {
+                // Radio buttons for single selection
+                options.forEach((option, index) => {
+                    const cleanOption = option.trim();
+                    html += `
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; background: white;" data-option-index="${index}">
+                            <input type="radio" name="correctAnswerPreview" value="${index}" style="cursor: pointer;">
+                            <span>${escapeHtml(cleanOption)}</span>
+                        </label>
+                    `;
+                });
+            } else if (questionType === 'checkbox') {
+                // Checkboxes for multiple selection
+                options.forEach((option, index) => {
+                    const cleanOption = option.trim();
+                    html += `
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; background: white;" data-option-index="${index}">
+                            <input type="checkbox" name="correctAnswerPreview" value="${index}" style="cursor: pointer;">
+                            <span>${escapeHtml(cleanOption)}</span>
+                        </label>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            html += '<p style="margin-top: 10px; font-size: 13px; color: #6b7280;">Click to select the correct answer(s)</p>';
+            
+            previewContainer.innerHTML = html;
+            
+            // Add event listeners to update hidden correct answer field
+            const inputs = previewContainer.querySelectorAll('input[name="correctAnswerPreview"]');
+            inputs.forEach(input => {
+                input.addEventListener('change', updateCorrectAnswerFromPreview);
+            });
+        }
+
+        function updateCorrectAnswerFromPreview() {
+            const questionType = document.getElementById('questionType').value;
+            const optionsText = document.getElementById('quizOptions').value;
+            const options = optionsText.split('\n').filter(opt => opt.trim()).map(opt => opt.trim());
+            const inputs = document.querySelectorAll('input[name="correctAnswerPreview"]:checked');
+            
+            if (questionType === 'select') {
+                // Single selection - get the selected option text
+                if (inputs.length > 0) {
+                    const index = parseInt(inputs[0].value);
+                    document.getElementById('correctAnswer').value = options[index] || '';
+                }
+            } else if (questionType === 'checkbox') {
+                // Multiple selection - get array of selected option texts
+                const selectedOptions = Array.from(inputs).map(input => {
+                    const index = parseInt(input.value);
+                    return options[index];
+                });
+                document.getElementById('correctAnswer').value = JSON.stringify(selectedOptions);
+            }
+        }
 
         // Handle scoring checkbox
         document.getElementById('isScored').addEventListener('change', function() {
@@ -2821,12 +3078,13 @@
                 formData.points = 0;
             }
 
-            if (formData.question_type === 'select') {
+            if (formData.question_type === 'select' || formData.question_type === 'checkbox') {
                 const optionsText = document.getElementById('quizOptions').value;
                 formData.options = optionsText.split('\n').filter(option => option.trim());
                 
                 if (formData.options.length < 2) {
-                    showNotification('Please provide at least 2 options for multiple choice', 'error');
+                    const questionTypeLabel = formData.question_type === 'checkbox' ? 'checkbox' : 'multiple choice';
+                    showNotification(`Please provide at least 2 options for ${questionTypeLabel}`, 'error');
                     return;
                 }
             }
@@ -3263,6 +3521,37 @@
                     <button type="button" class="btn" onclick="closeExportModal()" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Profile Edit Modal -->
+    <div id="profileModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Edit Profile</h2>
+                <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+            </div>
+            <form id="profileForm" style="padding: 20px;">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #1f2937;">Display Name</label>
+                    <input type="text" id="profileDisplayName" class="form-input" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;" required>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #1f2937;">
+                        Change Password <span style="color: #6b7280; font-weight: normal;">(optional)</span>
+                    </label>
+                    <input type="password" id="profileCurrentPassword" class="form-input" placeholder="Current password" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 10px;">
+                    <input type="password" id="profileNewPassword" class="form-input" placeholder="New password (min 6 characters)" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 10px;">
+                    <input type="password" id="profileConfirmPassword" class="form-input" placeholder="Confirm new password" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                    <small style="color: #6b7280; display: block; margin-top: 5px;">Leave blank if you don't want to change your password</small>
+                </div>
+
+                <div style="display: grid; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">💾 Save Changes</button>
+                    <button type="button" class="btn" onclick="closeProfileModal()" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 </body>

@@ -76,9 +76,9 @@ CREATE TABLE IF NOT EXISTS quizzes (
     title TEXT NOT NULL,
     content_text TEXT,
     images TEXT, -- JSON array of image URLs
-    question_type TEXT NOT NULL CHECK (question_type IN ('text', 'select')),
-    options TEXT, -- JSON array for select type questions
-    correct_answer TEXT, -- The correct answer for grading
+    question_type TEXT NOT NULL CHECK (question_type IN ('text', 'select', 'checkbox')),
+    options TEXT, -- JSON array for select/checkbox type questions
+    correct_answer TEXT, -- The correct answer for grading (JSON array for checkbox)
     course_id TEXT,
     category_id TEXT,
     created_by TEXT NOT NULL,

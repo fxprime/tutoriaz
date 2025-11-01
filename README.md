@@ -1,16 +1,18 @@
-# ESP32 Course Platform
+# Tutoriaz - Real-time Quiz Platform
 
-Interactive teaching platform for ESP32 course with real-time quizzes and student engagement.
-Vibe coding By Modulemore via ChatGPT
+ระบบการสอนแบบอินเทอร์แอคทีฟสำหรับหลักสูตรออนไซต์ ที่มาพร้อมกับแบบทดสอบเรียลไทม์และการมีส่วนร่วมของนักเรียน พร้อมระบบจัดการคอร์สแบบอิสระผ่าน mkdocs 
 
 ## Features
 
 - **Teacher Dashboard**: Create and push quizzes, see online students, track responses
+- **Teacher Profile Management**: Edit display name and change password through UI
 - **Student Interface**: Course content with real-time quiz notifications
 - **Real-time Communication**: WebSocket-based push notifications
 - **Quiz Types**: Text answers and multiple choice questions  
 - **Response Tracking**: Monitor student engagement, answer times, and completion rates
 - **Timeout Handling**: Configurable quiz timeouts with automatic status updates
+- **CSV Export**: Export student data (basic and full modes) with course and teacher information
+- **Show Answers**: Push quiz results to students showing correct/incorrect answers with color-coded display
 
 ## Quick Start
 
@@ -110,13 +112,62 @@ If the key/cert cannot be loaded the server falls back to HTTP automatically. In
 
 ## Usage
 
+### Teacher Account Management
+
+#### Creating New Teacher Accounts
+
+Use the provided script to create additional teacher accounts:
+
+```bash
+node scripts/createTeacher.js --username=john --password=secure123 --display="John Doe"
+```
+
+**Options:**
+- `--username` - Username for login (required)
+- `--password` - Password for the account (required, min 6 characters)
+- `--display` - Display name shown in UI (optional, defaults to username)
+
+**Example:**
+```bash
+# Create a teacher with default display name
+node scripts/createTeacher.js --username=teacher2 --password=mypassword
+
+# Create a teacher with custom display name
+node scripts/createTeacher.js --username=jane.smith --password=secure456 --display="Dr. Jane Smith"
+```
+
+The script will:
+- Check if the username already exists
+- Hash the password securely using bcrypt
+- Create the teacher account in the database
+- Display the new user ID
+
+#### Editing Teacher Profile
+
+Teachers can update their own profile through the web interface:
+
+1. Log in to the teacher dashboard
+2. Click the **"⚙️ Profile"** button in the header (next to Logout)
+3. Update display name and/or password:
+   - **Display Name**: Change how your name appears to students
+   - **Password**: Enter current password, then new password (min 6 characters)
+4. Click **"💾 Save Changes"**
+
+**Security Notes:**
+- Changing password requires entering your current password
+- Passwords are validated for minimum length (6 characters)
+- All passwords are hashed using bcrypt before storage
+
 ### For Teachers
 
 1. Login with teacher credentials
-2. Create quizzes using the form (text or multiple choice)
-3. Push quizzes to all online students
-4. Monitor real-time responses and engagement
-5. Undo quiz pushes if needed
+2. **Edit Your Profile**: Click "⚙️ Profile" button to update display name or change password
+3. Create quizzes using the form (text or multiple choice)
+4. Push quizzes to all online students
+5. Monitor real-time responses and engagement
+6. **Export Student Data**: Click "📥 Export CSV" to download student performance data
+7. **Show Quiz Results**: Click "📋 Show Answers to Students" to push quiz results with correct answers
+8. Undo quiz pushes if needed
 
 ### For Students
 
@@ -125,6 +176,7 @@ If the key/cert cannot be loaded the server falls back to HTTP automatically. In
 3. Receive quiz notifications as overlays
 4. Submit answers within the time limit
 5. See confirmation when answers are submitted
+6. **View Quiz Results**: When teacher pushes answers, see your results with correct answers highlighted
 
 ## Course Documentation
 
@@ -327,7 +379,16 @@ my_new_course/
 
 ### Authentication
 - `POST /api/login` - User authentication
+- `POST /api/register` - Student registration
 - `GET /api/me` - Get current user info
+- `PUT /api/profile` - Update user profile (display name and password)
+
+### Courses
+- `GET /api/courses` - List courses (context-aware for teachers/students)
+- `POST /api/courses` - Create new course (teacher only)
+- `POST /api/courses/:courseId/enroll` - Enroll in course (student only)
+- `GET /api/courses/:courseId/export-csv` - Export student data as CSV (teacher only)
+- `POST /api/courses/:courseId/push-answers` - Push quiz results to students (teacher only)
 
 ### Quizzes (Teacher only)
 - `GET /api/quizzes` - List teacher's quizzes
@@ -350,6 +411,7 @@ my_new_course/
 - `quiz_response` - Server notifies teachers of responses
 - `quiz_undo` - Server cancels active quiz
 - `quiz_timeout` - Quiz timeout notification
+- `show_answers` - Server pushes quiz results to students with correct answers
 
 ### Presence
 - `online_students` - Updates list of connected students
@@ -359,10 +421,15 @@ my_new_course/
 ### Database Schema
 
 The platform uses these main tables:
-- `users` - User accounts (teachers/students)
-- `quizzes` - Quiz definitions  
-- `quiz_pushes` - Quiz distribution instances
-- `quiz_responses` - Student answers and engagement data
+- `users` - User accounts (teachers/students) with profile information
+- `courses` - Course definitions with access codes and documentation settings
+- `course_enrollments` - Student course enrollment tracking
+- `course_attendance_sessions` - Student viewing/attendance tracking
+- `quiz_categories` - Quiz organization folders
+- `quizzes` - Quiz definitions with scoring and timeout settings
+- `quiz_pushes` - Quiz distribution instances with targeting
+- `quiz_responses` - Student answers and engagement data with correctness tracking
+- `student_quiz_queue` - Per-student quiz queue management
 
 ### File Structure
 
@@ -537,6 +604,9 @@ sqlite3 database.sqlite
 SELECT * FROM users;
 ```
 
-## License
+## Created by
 
+Modulemore Co., Ltd.
+
+## License
 MIT License - see LICENSE file for details.
