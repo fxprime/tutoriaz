@@ -1,18 +1,73 @@
 # Tutoriaz - Real-time Quiz Platform
 
-ระบบการสอนแบบอินเทอร์แอคทีฟสำหรับหลักสูตรออนไซต์ ที่มาพร้อมกับแบบทดสอบเรียลไทม์และการมีส่วนร่วมของนักเรียน พร้อมระบบจัดการคอร์สแบบอิสระผ่าน mkdocs 
+ระบบการสอนแบบอินเทอร์แอคทีฟสำหรับหลักสูตรออนไซต์ ที่มาพร้อมกับแบบทดสอบเรียลไทม์และการมีส่วนร่วมของนักเรียน พร้อมระบบจัดการคอร์สแบบอิสระผ่าน mkdocs
+
+## What's New 🎉
+
+### Version 2.0 Features
+
+- ✅ **Checkbox Questions**: Multiple-selection questions with array-based answers
+- ✅ **Markdown Support**: Full markdown rendering in questions and options (code blocks, formatting, etc.)
+- ✅ **Interactive Quiz Creation**: Preview and select correct answers directly in the form
+- ✅ **Quiz Export/Import**: 
+  - Export as JSON for backup and migration
+  - Export as Markdown for documentation and Google Forms conversion
+  - Import from JSON files
+- ✅ **Persistent Quiz Monitor**: Reusable popup window that updates with each quiz (perfect for dual monitors)
+- ✅ **Enhanced Answer Display**: Clean, human-readable answer formatting
+- ✅ **Quiz Categories**: Organize quizzes into folders
+- ✅ **Scoring System**: Configurable points with automatic grading
+- ✅ **Quiz Queue System**: Per-student queue management with position tracking
+
+### Recent Improvements
+
+- Fixed checkbox question type database constraint
+- Enhanced quiz validation and error handling
+- Improved modal dialogs with proper overlay positioning
+- Better export/import error messages
+- Environment variable support for database path (`DB_PATH`)
+- Migration scripts with `.env` file support 
 
 ## Features
 
+### Quiz Management
+- **Multiple Question Types**: 
+  - Text answers (free-form input)
+  - Multiple choice (single selection)
+  - **Checkbox questions (multiple selection)** - NEW!
+- **Markdown Support**: Questions and options support markdown formatting including code blocks
+- **Interactive Preview**: Teachers can preview and select correct answers directly in the creation form
+- **Quiz Categories**: Organize quizzes into folders/categories
+- **Scoring System**: Configurable points per quiz with automatic grading
+- **Export/Import**: 
+  - Export quizzes as **JSON** for backup and migration
+  - Export quizzes as **Markdown** for viewing and Google Forms conversion
+  - Import quizzes from JSON files
+
+### Real-time Features
 - **Teacher Dashboard**: Create and push quizzes, see online students, track responses
-- **Teacher Profile Management**: Edit display name and change password through UI
 - **Student Interface**: Course content with real-time quiz notifications
-- **Real-time Communication**: WebSocket-based push notifications
-- **Quiz Types**: Text answers and multiple choice questions  
+- **WebSocket-based Communication**: Instant push notifications and response tracking
+- **Quiz Monitor Window**: Persistent popup window that updates with each new quiz (perfect for dual monitors)
 - **Response Tracking**: Monitor student engagement, answer times, and completion rates
 - **Timeout Handling**: Configurable quiz timeouts with automatic status updates
+
+### Student Management
+- **Course Enrollment**: Students enroll with course-specific passkeys
+- **Attendance Tracking**: Monitor which students are actively viewing course content
+- **Performance Analytics**: Track quiz scores, response rates, and time taken
+- **Quiz Queue System**: Students see upcoming quizzes in their personal queue
+
+### Data & Reporting
 - **CSV Export**: Export student data (basic and full modes) with course and teacher information
 - **Show Answers**: Push quiz results to students showing correct/incorrect answers with color-coded display
+- **Student Scores**: View comprehensive scoring dashboard with filtering and sorting
+- **Quiz History**: Complete history of all quiz pushes and student responses
+
+### User Management
+- **Teacher Profile Management**: Edit display name and change password through UI
+- **Multiple Teachers**: Support for multiple teacher accounts with separate quiz libraries
+- **Student Registration**: Self-service registration with course enrollment
 
 ## Quick Start
 
@@ -162,21 +217,38 @@ Teachers can update their own profile through the web interface:
 
 1. Login with teacher credentials
 2. **Edit Your Profile**: Click "⚙️ Profile" button to update display name or change password
-3. Create quizzes using the form (text or multiple choice)
-4. Push quizzes to all online students
-5. Monitor real-time responses and engagement
-6. **Export Student Data**: Click "📥 Export CSV" to download student performance data
-7. **Show Quiz Results**: Click "📋 Show Answers to Students" to push quiz results with correct answers
-8. Undo quiz pushes if needed
+3. **Create Quizzes**: 
+   - Choose question type (text, multiple choice, or checkbox)
+   - Use markdown for formatting (code blocks, bold, italic, etc.)
+   - Preview options with interactive answer selection
+   - Organize with categories
+   - Set time limits and point values
+4. **Push Quizzes**: Send quizzes to all online students or specific courses
+5. **Monitor Responses**: Watch real-time responses in a persistent popup window
+6. **Export Quizzes**:
+   - **JSON format**: For backup and importing to other courses
+   - **Markdown format**: For documentation or converting to Google Forms
+7. **Import Quizzes**: Upload JSON files to reuse quizzes across courses
+8. **Export Student Data**: Click "📥 Export CSV" to download student performance data
+9. **Show Quiz Results**: Click "📋 Show Answers to Students" to push quiz results with correct answers
+10. Undo quiz pushes if needed
 
 ### For Students
 
-1. Login with student credentials
+1. Login with student credentials or register with course passkey
 2. View course content on the main page
-3. Receive quiz notifications as overlays
-4. Submit answers within the time limit
-5. See confirmation when answers are submitted
-6. **View Quiz Results**: When teacher pushes answers, see your results with correct answers highlighted
+3. **Receive Quiz Notifications**: 
+   - Quizzes appear as overlay notifications
+   - See your position in the queue
+   - Markdown-formatted questions and options
+4. **Answer Quizzes**:
+   - Text input for free-form answers
+   - Radio buttons for single-choice questions
+   - **Checkboxes for multiple-selection questions**
+5. Submit answers within the time limit
+6. See confirmation when answers are submitted
+7. **View Quiz Results**: When teacher pushes answers, see your results with correct answers highlighted
+8. Track your quiz history and scores
 
 ## Course Documentation
 
@@ -393,8 +465,19 @@ my_new_course/
 ### Quizzes (Teacher only)
 - `GET /api/quizzes` - List teacher's quizzes
 - `POST /api/quizzes` - Create new quiz
+- `PUT /api/quizzes/:quizId` - Update existing quiz
+- `DELETE /api/quizzes/:quizId` - Delete quiz
+- `GET /api/quizzes/:quizId/responses` - Get quiz responses
+- `POST /api/quizzes/export` - Export quizzes as JSON or Markdown
+- `POST /api/quizzes/import` - Import quizzes from JSON
 - `POST /api/pushes` - Push quiz to students  
 - `POST /api/pushes/:id/undo` - Undo quiz push
+
+### Categories (Teacher only)
+- `GET /api/categories` - List quiz categories
+- `POST /api/categories` - Create new category
+- `PUT /api/categories/:id` - Update category
+- `DELETE /api/categories/:id` - Delete category
 
 ### Students
 - `GET /api/students/online` - List online students (teacher only)
@@ -407,6 +490,9 @@ my_new_course/
 
 ### Quiz Flow
 - `quiz_push` - Server pushes quiz to students
+- `quiz_queue_updated` - Server updates student's quiz queue
+- `show_next_quiz` - Server tells student to display next quiz
+- `queue_empty` - Notify student queue is empty
 - `quiz_answer` - Student submits answer
 - `quiz_response` - Server notifies teachers of responses
 - `quiz_undo` - Server cancels active quiz
@@ -417,6 +503,54 @@ my_new_course/
 - `online_students` - Updates list of connected students
 
 ## Development
+
+### Running Migrations
+
+The platform includes database migrations for schema updates. To run a migration:
+
+```bash
+# Run specific migration (automatically loads .env)
+node scripts/migrate-011.js
+
+# Or with explicit DB_PATH
+DB_PATH=/var/lib/tutoriaz/database.sqlite node scripts/migrate-011.js
+```
+
+### Database Utilities
+
+**Check Quiz Data:**
+```bash
+node scripts/checkQuizData.js
+```
+Shows detailed information about quizzes and their options, useful for debugging.
+
+**Fix Checkbox Quizzes:**
+```bash
+node scripts/fixCheckboxQuiz.js
+```
+Repairs checkbox quizzes that were created without options (before the fix).
+
+### Environment Variables
+
+The platform supports these environment variables:
+
+- `DB_PATH` - Path to SQLite database (default: `./database.sqlite`)
+- `PORT` - Server port (default: `3030`)
+- `HOST` - Server host (default: `0.0.0.0`)
+- `NODE_ENV` - Environment mode (`development` or `production`)
+- `JWT_SECRET` - Secret for JWT tokens
+- `HTTPS_KEY_PATH` - Path to HTTPS private key
+- `HTTPS_CERT_PATH` - Path to HTTPS certificate
+- `HTTPS_CA_PATH` - Path to CA certificate(s)
+- `HTTPS_PASSPHRASE` - Passphrase for HTTPS key
+
+Create a `.env` file in the project root:
+```env
+DB_PATH=/var/lib/tutoriaz/database.sqlite
+PORT=3030
+NODE_ENV=production
+JWT_SECRET=your-secret-here
+```
 
 ### Database Schema
 
@@ -436,20 +570,33 @@ The platform uses these main tables:
 ```
 ├── server.js           # Main server application
 ├── schema.sql          # Database schema
-├── docs-site/          # Course documentation (MkDocs submodule)
-│   ├── mkdocs.yml      # MkDocs configuration
-│   └── docs/           # Markdown content
+├── migrations/         # Database migrations
+│   ├── 011_add_checkbox_question_type.sql
+│   └── ...
+├── courses/            # Course documentation (Git submodules)
+│   └── esp32_basic/
+│       ├── mkdocs.yml
+│       └── docs/
 ├── scripts/
-│   ├── bootstrapDemo.js  # Combined wipe + seed helper
-│   ├── createTeacher.js  # Standalone teacher seeding utility
-│   ├── createStudents.js # Standalone student batch creator
-│   ├── seedQuizzes.js    # Standalone quiz seeding utility
-│   └── testPushUndo.js   # Integration test for push/undo flow
+│   ├── bootstrapDemo.js     # Combined wipe + seed helper
+│   ├── createTeacher.js     # Standalone teacher seeding utility
+│   ├── createStudents.js    # Standalone student batch creator
+│   ├── seedQuizzes.js       # Standalone quiz seeding utility
+│   ├── testPushUndo.js      # Integration test for push/undo flow
+│   ├── migrate-011.js       # Migration script for checkbox support
+│   ├── checkQuizData.js     # Database inspection tool
+│   └── fixCheckboxQuiz.js   # Quiz data repair utility
 ├── public/
-│   ├── index.html     # Login page
-│   ├── teacher.html   # Teacher dashboard
-│   └── student.html   # Student interface
-└── package.json       # Dependencies and scripts
+│   ├── index.html        # Login page
+│   ├── register.html     # Student registration
+│   ├── teacher.html      # Teacher dashboard
+│   ├── student.html      # Student interface
+│   └── quiz-monitor.html # Quiz monitoring popup
+├── example_quiz_export.json  # Example JSON export
+├── example_quiz_export.md    # Example Markdown export
+├── QUIZ_EXPORT_IMPORT.md     # Export/Import documentation
+├── MARKDOWN_EXPORT_GUIDE.md  # Markdown export guide
+└── package.json              # Dependencies and scripts
 ```
 
 ## Deployment on Debian 10
