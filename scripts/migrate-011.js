@@ -4,6 +4,23 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 
+// Load .env file if it exists
+const envPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+    console.log('Loading environment from .env file...');
+    const envFile = fs.readFileSync(envPath, 'utf8');
+    envFile.split('\n').forEach(line => {
+        const match = line.match(/^([^=:#]+)=(.*)$/);
+        if (match) {
+            const key = match[1].trim();
+            const value = match[2].trim();
+            if (!process.env[key]) {
+                process.env[key] = value;
+            }
+        }
+    });
+}
+
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'database.sqlite');
 const MIGRATION_FILE = path.join(__dirname, '..', 'migrations', '011_add_checkbox_question_type.sql');
 

@@ -1,7 +1,26 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 
-const dbPath = path.join(__dirname, '..', 'database.sqlite');
+// Load .env file if it exists
+const envPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+    console.log('Loading environment from .env file...');
+    const envFile = fs.readFileSync(envPath, 'utf8');
+    envFile.split('\n').forEach(line => {
+        const match = line.match(/^([^=:#]+)=(.*)$/);
+        if (match) {
+            const key = match[1].trim();
+            const value = match[2].trim();
+            if (!process.env[key]) {
+                process.env[key] = value;
+            }
+        }
+    });
+}
+
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'database.sqlite');
+console.log('Database path:', dbPath);
 const db = new sqlite3.Database(dbPath);
 
 console.log('=== Fixing Checkbox Quiz ===\n');

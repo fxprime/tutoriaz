@@ -3157,6 +3157,142 @@ app.delete('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
     }
 });
 
+// Export quizzes as JSON (teacher only)
+app.post('/api/quizzes/export', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { quizIds, courseId } = req.body;
+
+        let query = 'SELECT * FROM quizzes WHERE created_by = ?';
+        let params = [req.user.userId];
+
+        if (quizIds && Array.isArray(quizIds) && quizIds.length > 0) {
+            // Export specific quizzes
+            const placeholders = quizIds.map(() => '?').join(',');
+            query += ` AND id IN (${placeholders})`;
+            params.push(...quizIds);
+        } else if (courseId) {
+            // Export all quizzes from a course
+            query += ' AND course_id = ?';
+            params.push(courseId);
+        }
+
+        query += ' ORDER BY created_at DESC';
+
+        db.all(query, params, (err, rows) => {
+            if (err) {
+                console.error('Export quizzes error:', err);
+                return res.status(500).json({ error: 'Internal server error' });
+            }
+
+            // Parse JSON fields
+            const quizzes = rows.map(row => ({
+                title: row.title,
+                content_text: row.content_text,
+                images: JSON.parse(row.images || '[]'),
+                question_type: row.question_type,
+                options: JSON.parse(row.options || '[]'),
+                correct_answer: row.correct_answer,
+                category_id: row.category_id,
+                course_id: row.course_id,
+                timeout_seconds: row.timeout_seconds,
+                is_scored: row.is_scored,
+                points: row.points
+            }));
+
+            const exportData = {
+                version: '1.0',
+                exported_at: new Date().toISOString(),
+                exported_by: req.user.userId,
+                count: quizzes.length,
+                quizzes: quizzes
+            };
+
+            res.json(exportData);
+        });
+    } catch (error) {
+        console.error('Export quizzes error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Import quizzes from JSON (teacher only)
+app.post('/api/quizzes/import', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { quizzes, targetCourseId, targetCategoryId } = req.body;
+
+        if (!Array.isArray(quizzes) || quizzes.length === 0) {
+            return res.status(400).json({ error: 'Invalid import data: quizzes array required' });
+        }
+
+        // Validate target course if provided
+        if (targetCourseId) {
+            const course = await ensureTeacherOwnsCourse(req.user.userId, targetCourseId);
+            if (!course) {
+                return res.status(404).json({ error: 'Target course not found or access denied' });
+            }
+        }
+
+        const imported = [];
+        const errors = [];
+
+        for (let i = 0; i < quizzes.length; i++) {
+            const quizData = quizzes[i];
+            
+            try {
+                // Validate required fields
+                if (!quizData.title || !quizData.question_type) {
+                    errors.push({ index: i, title: quizData.title || 'Untitled', error: 'Missing required fields' });
+                    continue;
+                }
+
+                // Create new quiz with new ID
+                const newQuiz = {
+                    id: uuidv4(),
+                    title: quizData.title,
+                    content_text: quizData.content_text || '',
+                    images: quizData.images || [],
+                    question_type: quizData.question_type,
+                    options: quizData.options || [],
+                    correct_answer: quizData.correct_answer || '',
+                    category_id: targetCategoryId || quizData.category_id || null,
+                    course_id: targetCourseId || quizData.course_id || null,
+                    created_by: req.user.userId,
+                    timeout_seconds: quizData.timeout_seconds || 60,
+                    is_scored: quizData.is_scored !== undefined ? (quizData.is_scored ? 1 : 0) : 1,
+                    points: quizData.points !== undefined ? parseInt(quizData.points, 10) : 1
+                };
+
+                await createQuizInDB(newQuiz);
+                imported.push({ title: newQuiz.title, id: newQuiz.id });
+            } catch (error) {
+                console.error(`Import quiz ${i} error:`, error);
+                errors.push({ index: i, title: quizData.title || 'Untitled', error: error.message });
+            }
+        }
+
+        res.json({
+            success: true,
+            imported: imported.length,
+            failed: errors.length,
+            details: {
+                imported: imported,
+                errors: errors
+            }
+        });
+    } catch (error) {
+        console.error('Import quizzes error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Get student's quiz history (student only)
 app.get('/api/my-quiz-history', authenticateToken, async (req, res) => {
     try {

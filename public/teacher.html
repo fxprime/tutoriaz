@@ -980,7 +980,13 @@
             </div>
 
             <div class="sidebar-section quiz-section">
-                <h3>Your Quizzes</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Your Quizzes</h3>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" onclick="showExportQuizzesModal()" style="padding: 6px 12px; font-size: 14px;">📤 Export</button>
+                        <button class="btn btn-secondary" onclick="showImportQuizzesModal()" style="padding: 6px 12px; font-size: 14px;">📥 Import</button>
+                    </div>
+                </div>
                 <div class="quiz-list" id="quizList">
                     <div class="quiz-item">
                         <p>No quizzes created yet</p>
@@ -998,6 +1004,58 @@
                 <button type="button" class="student-detail-close" id="closeStudentDetail" aria-label="Close student details">X</button>
             </div>
             <div id="studentDetailBody" class="student-detail-body"></div>
+        </div>
+    </div>
+
+    <!-- Export Quizzes Modal -->
+    <div id="exportQuizzesModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3>Export Quizzes</h3>
+            <p>Select quizzes and export format:</p>
+            <div style="margin: 15px 0; padding: 10px; background: #f9fafb; border-radius: 6px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600;">Export Format:</label>
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">
+                    <input type="radio" name="exportFormat" value="json" checked>
+                    <span>JSON (for import/backup)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="exportFormat" value="markdown">
+                    <span>Markdown (for viewing/Google Forms)</span>
+                </label>
+            </div>
+            <div id="exportQuizList" style="max-height: 400px; overflow-y: auto; margin: 15px 0;">
+                <!-- Quiz checkboxes will be inserted here -->
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: space-between; margin-top: 15px;">
+                <div>
+                    <button class="btn btn-secondary" onclick="selectAllQuizzes(true)">Select All</button>
+                    <button class="btn btn-secondary" onclick="selectAllQuizzes(false)">Deselect All</button>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="exportSelectedQuizzes()">Export Selected</button>
+                    <button class="btn btn-secondary" onclick="exportAllQuizzes()">Export All</button>
+                    <button class="btn" onclick="closeExportQuizzesModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Quizzes Modal -->
+    <div id="importQuizzesModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3>Import Quizzes</h3>
+            <p>Upload a JSON file containing quizzes to import:</p>
+            <div style="margin: 20px 0;">
+                <input type="file" id="importFileInput" accept=".json" style="margin-bottom: 15px;">
+                <div id="importPreview" style="background: #f9fafb; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb; display: none;">
+                    <h4 style="margin-top: 0;">Preview:</h4>
+                    <div id="importPreviewContent"></div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+                <button class="btn btn-primary" onclick="importQuizzes()" id="importBtn" disabled>Import</button>
+                <button class="btn" onclick="closeImportQuizzesModal()">Cancel</button>
+            </div>
         </div>
     </div>
 
@@ -1019,6 +1077,7 @@
         let lastGeneratedPasskey = '';
         let activeStudentDetailId = null;
         let baseUrl = window.location.origin; // Default fallback
+        let quizMonitorWindow = null; // Track the quiz monitor window for reuse
 
         // Fetch app configuration
         async function fetchAppConfig() {
@@ -2930,6 +2989,300 @@
             }
         }
 
+        // Export/Import Functions
+        function showExportQuizzesModal() {
+            const modal = document.getElementById('exportQuizzesModal');
+            const listEl = document.getElementById('exportQuizList');
+            
+            if (quizzes.length === 0) {
+                listEl.innerHTML = '<p style="color: #6b7280;">No quizzes to export</p>';
+            } else {
+                listEl.innerHTML = quizzes.map(quiz => `
+                    <label style="display: flex; align-items: center; padding: 8px; cursor: pointer; border-bottom: 1px solid #e5e7eb;">
+                        <input type="checkbox" class="export-quiz-checkbox" value="${quiz.id}" style="margin-right: 10px;">
+                        <span><strong>${escapeHtml(quiz.title)}</strong> - ${quiz.question_type}</span>
+                    </label>
+                `).join('');
+            }
+            
+            modal.classList.remove('hidden');
+            
+            // Close on background click
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    closeExportQuizzesModal();
+                }
+            };
+        }
+
+        function closeExportQuizzesModal() {
+            document.getElementById('exportQuizzesModal').classList.add('hidden');
+        }
+
+        function selectAllQuizzes(select) {
+            const checkboxes = document.querySelectorAll('.export-quiz-checkbox');
+            checkboxes.forEach(cb => cb.checked = select);
+        }
+
+        async function exportSelectedQuizzes() {
+            const checkboxes = document.querySelectorAll('.export-quiz-checkbox:checked');
+            const quizIds = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (quizIds.length === 0) {
+                showNotification('Please select at least one quiz to export', 'error');
+                return;
+            }
+            
+            await exportQuizzes(quizIds);
+        }
+
+        async function exportAllQuizzes() {
+            if (quizzes.length === 0) {
+                showNotification('No quizzes to export', 'error');
+                return;
+            }
+            
+            await exportQuizzes(null);
+        }
+
+        async function exportQuizzes(quizIds) {
+            try {
+                const format = document.querySelector('input[name="exportFormat"]:checked').value;
+                
+                const response = await fetch('/api/quizzes/export', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        quizIds: quizIds,
+                        courseId: selectedCourseId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Export failed');
+                }
+
+                const data = await response.json();
+                
+                let blob, filename;
+                
+                if (format === 'markdown') {
+                    // Convert to Markdown
+                    const markdown = convertQuizzesToMarkdown(data.quizzes);
+                    blob = new Blob([markdown], { type: 'text/markdown' });
+                    filename = `quizzes_export_${new Date().toISOString().split('T')[0]}.md`;
+                } else {
+                    // Export as JSON
+                    blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    filename = `quizzes_export_${new Date().toISOString().split('T')[0]}.json`;
+                }
+                
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showNotification(`Exported ${data.count} quiz(es)`, 'success');
+                closeExportQuizzesModal();
+            } catch (error) {
+                console.error('Export error:', error);
+                showNotification('Export failed', 'error');
+            }
+        }
+
+        function convertQuizzesToMarkdown(quizzes) {
+            let markdown = `# Quiz Export\n\n`;
+            markdown += `Exported on: ${new Date().toLocaleString()}\n`;
+            markdown += `Total Quizzes: ${quizzes.length}\n\n`;
+            markdown += `---\n\n`;
+
+            quizzes.forEach((quiz, index) => {
+                markdown += `## Quiz ${index + 1}: ${quiz.title}\n\n`;
+                
+                // Question content
+                if (quiz.content_text) {
+                    markdown += `**Question:**\n\n${quiz.content_text}\n\n`;
+                }
+                
+                // Question type
+                markdown += `**Type:** ${quiz.question_type}\n\n`;
+                
+                // Timeout
+                if (quiz.timeout_seconds) {
+                    markdown += `**Time Limit:** ${quiz.timeout_seconds} seconds\n\n`;
+                }
+                
+                // Scoring
+                if (quiz.is_scored) {
+                    markdown += `**Points:** ${quiz.points || 1}\n\n`;
+                }
+                
+                // Options for select/checkbox questions
+                if (quiz.question_type === 'select' || quiz.question_type === 'checkbox') {
+                    markdown += `**Options:**\n\n`;
+                    const options = quiz.options || [];
+                    options.forEach((option, idx) => {
+                        const letter = String.fromCharCode(97 + idx); // a, b, c, d...
+                        markdown += `${letter}. ${option}\n`;
+                    });
+                    markdown += `\n`;
+                    
+                    // Correct answer(s)
+                    if (quiz.correct_answer) {
+                        markdown += `**Correct Answer:**\n\n`;
+                        
+                        if (quiz.question_type === 'select') {
+                            try {
+                                const answer = JSON.parse(quiz.correct_answer);
+                                if (answer.selected_index !== undefined) {
+                                    const letter = String.fromCharCode(97 + answer.selected_index);
+                                    markdown += `${letter}. ${answer.selected_text || options[answer.selected_index]}\n\n`;
+                                }
+                            } catch (e) {
+                                markdown += `${quiz.correct_answer}\n\n`;
+                            }
+                        } else if (quiz.question_type === 'checkbox') {
+                            try {
+                                const answers = JSON.parse(quiz.correct_answer);
+                                if (Array.isArray(answers)) {
+                                    answers.forEach(ans => {
+                                        const idx = options.indexOf(ans);
+                                        if (idx !== -1) {
+                                            const letter = String.fromCharCode(97 + idx);
+                                            markdown += `${letter}. ${ans}\n`;
+                                        }
+                                    });
+                                    markdown += `\n`;
+                                }
+                            } catch (e) {
+                                markdown += `${quiz.correct_answer}\n\n`;
+                            }
+                        }
+                    }
+                } else if (quiz.question_type === 'text') {
+                    // Text answer
+                    if (quiz.correct_answer) {
+                        markdown += `**Expected Answer:**\n\n${quiz.correct_answer}\n\n`;
+                    }
+                }
+                
+                markdown += `---\n\n`;
+            });
+            
+            markdown += `## End of Quiz Export\n\n`;
+            markdown += `*Generated by Tutoriaz Quiz System*\n`;
+            
+            return markdown;
+        }
+
+        function showImportQuizzesModal() {
+            const modal = document.getElementById('importQuizzesModal');
+            document.getElementById('importFileInput').value = '';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importBtn').disabled = true;
+            modal.classList.remove('hidden');
+            
+            // Close on background click
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    closeImportQuizzesModal();
+                }
+            };
+        }
+
+        function closeImportQuizzesModal() {
+            document.getElementById('importQuizzesModal').classList.add('hidden');
+        }
+
+        // File input change handler
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('importFileInput').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    
+                    if (!data.quizzes || !Array.isArray(data.quizzes)) {
+                        throw new Error('Invalid format: quizzes array not found');
+                    }
+
+                    // Show preview
+                    const preview = document.getElementById('importPreview');
+                    const content = document.getElementById('importPreviewContent');
+                    content.innerHTML = `
+                        <p><strong>Version:</strong> ${data.version || 'Unknown'}</p>
+                        <p><strong>Exported:</strong> ${data.exported_at ? new Date(data.exported_at).toLocaleString() : 'Unknown'}</p>
+                        <p><strong>Quiz Count:</strong> ${data.quizzes.length}</p>
+                        <div style="margin-top: 10px;">
+                            <strong>Quizzes:</strong>
+                            <ul style="margin: 5px 0; padding-left: 20px;">
+                                ${data.quizzes.slice(0, 5).map(q => `<li>${escapeHtml(q.title)} (${q.question_type})</li>`).join('')}
+                                ${data.quizzes.length > 5 ? `<li><em>...and ${data.quizzes.length - 5} more</em></li>` : ''}
+                            </ul>
+                        </div>
+                    `;
+                    preview.style.display = 'block';
+                    document.getElementById('importBtn').disabled = false;
+                    
+                    // Store data for import
+                    window.importData = data;
+                } catch (error) {
+                    console.error('Parse error:', error);
+                    showNotification('Invalid JSON file: ' + error.message, 'error');
+                    document.getElementById('importBtn').disabled = true;
+                }
+            });
+        });
+
+        async function importQuizzes() {
+            if (!window.importData) {
+                showNotification('No data to import', 'error');
+                return;
+            }
+
+            if (!selectedCourseId) {
+                showNotification('Please select a course before importing', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/quizzes/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        quizzes: window.importData.quizzes,
+                        targetCourseId: selectedCourseId
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showNotification(`Imported ${data.imported} quiz(es). Failed: ${data.failed}`, 'success');
+                    closeImportQuizzesModal();
+                    loadQuizzes();
+                    window.importData = null;
+                } else {
+                    showNotification(data.error || 'Import failed', 'error');
+                }
+            } catch (error) {
+                console.error('Import error:', error);
+                showNotification('Import failed', 'error');
+            }
+        }
+
         // Edit quiz
         function editQuiz(quizId) {
             const quiz = quizzes.find(q => q.id === quizId);
@@ -3428,16 +3781,24 @@
             
             const monitorUrl = `/quiz-monitor.html?pushId=${encodeURIComponent(pushId)}&quizId=${encodeURIComponent(quizId)}&token=${encodeURIComponent(token)}`;
             
-            const monitorWindow = window.open(
-                monitorUrl,
-                `QuizMonitor_${pushId}`,
-                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
-            );
-
-            if (monitorWindow) {
-                monitorWindow.focus();
+            // Check if monitor window exists and is still open
+            if (quizMonitorWindow && !quizMonitorWindow.closed) {
+                // Update the existing window with new quiz data
+                quizMonitorWindow.location.href = monitorUrl;
+                quizMonitorWindow.focus();
             } else {
-                showNotification('Please allow popups to view the quiz monitor', 'error');
+                // Open a new monitor window with a consistent name
+                quizMonitorWindow = window.open(
+                    monitorUrl,
+                    'QuizMonitor', // Use consistent name to reuse window
+                    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+                );
+
+                if (quizMonitorWindow) {
+                    quizMonitorWindow.focus();
+                } else {
+                    showNotification('Please allow popups to view the quiz monitor', 'error');
+                }
             }
         }
 

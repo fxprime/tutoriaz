@@ -1,0 +1,58 @@
+{
+  "version": "1.0",
+  "exported_at": "2025-11-01T12:00:00.000Z",
+  "exported_by": "teacher-001",
+  "count": 3,
+  "quizzes": [
+    {
+      "title": "Sample Multiple Choice Question",
+      "content_text": "What is the capital of France?",
+      "images": [],
+      "question_type": "select",
+      "options": [
+        "London",
+        "Paris",
+        "Berlin",
+        "Madrid"
+      ],
+      "correct_answer": "{\"selected_index\":1,\"selected_text\":\"Paris\"}",
+      "category_id": null,
+      "course_id": null,
+      "timeout_seconds": 60,
+      "is_scored": 1,
+      "points": 1
+    },
+    {
+      "title": "Sample Checkbox Question",
+      "content_text": "Which of the following are programming languages? (Select all that apply)",
+      "images": [],
+      "question_type": "checkbox",
+      "options": [
+        "Python",
+        "HTML",
+        "JavaScript",
+        "CSS",
+        "Java"
+      ],
+      "correct_answer": "[\"Python\",\"JavaScript\",\"Java\"]",
+      "category_id": null,
+      "course_id": null,
+      "timeout_seconds": 90,
+      "is_scored": 1,
+      "points": 2
+    },
+    {
+      "title": "Sample Text Question",
+      "content_text": "What is 2 + 2?",
+      "images": [],
+      "question_type": "text",
+      "options": [],
+      "correct_answer": "4",
+      "category_id": null,
+      "course_id": null,
+      "timeout_seconds": 30,
+      "is_scored": 1,
+      "points": 1
+    }
+  ]
+}
