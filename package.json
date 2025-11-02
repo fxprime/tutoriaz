@@ -8,19 +8,27 @@
     "dev": "nodemon server.js",
     "setup": "bash setup.sh",
     "seed": "node scripts/seedQuizzes.js",
-    "bootstrap": "node scripts/bootstrapDemo.js"
+    "bootstrap": "node scripts/bootstrapDemo.js",
+    "test:security": "node test-security.js",
+    "test:forms": "node test-form-security.js",
+    "demo:xss": "node demo-xss-protection.js"
   },
   "dependencies": {
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "csurf": "^1.11.0",
     "express": "^4.18.2",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.3.0",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "socket.io": "^4.7.2",
     "socket.io-client": "^4.8.1",
     "sqlite3": "^5.1.6",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

@@ -22,6 +22,7 @@
 
 ### Recent Improvements
 
+- **🔒 Security enhancements**: Comprehensive input validation, XSS protection, rate limiting, and stronger password requirements (see [SECURITY.md](SECURITY.md))
 - **Syntax highlighting** for code blocks in quiz questions and options
 - Fixed checkbox question type database constraint
 - Enhanced quiz validation and error handling
@@ -503,6 +504,43 @@ my_new_course/
 
 ### Presence
 - `online_students` - Updates list of connected students
+
+## Security
+
+The platform implements comprehensive security measures to protect against common vulnerabilities:
+
+- **🔒 Authentication**: Bcrypt password hashing with configurable rounds
+- **🛡️ Rate Limiting**: Protection against brute force attacks (15 requests per 15 minutes)
+- **🔐 Input Validation**: Strict username and password requirements
+- **✨ XSS Protection**: All user-generated content sanitized using the `xss` library
+- **💉 SQL Injection**: All database queries use parameterized statements
+- **🔑 JWT Tokens**: Secure token-based authentication with 24-hour expiry
+- **🚫 Reserved Usernames**: System usernames blocked (admin, root, etc.)
+- **📏 Body Size Limits**: Request payload size capped at 8KB
+
+### Password Requirements
+
+- Minimum 8 characters
+- Maximum 128 characters
+- Must contain at least one letter
+- Must contain at least one number or symbol
+
+### Username Requirements
+
+- 3-30 characters
+- Letters, numbers, and underscore only
+- Must start with a letter
+- Case-insensitive
+
+For detailed security information, see [SECURITY.md](SECURITY.md)
+
+### Security Testing
+
+Run the security test suite:
+
+```bash
+node test-security.js
+```
 
 ## Development
 

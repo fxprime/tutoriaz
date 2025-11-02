@@ -21,15 +21,15 @@
 <body>
     <div class="container">
         <h1>Create Student Account</h1>
-        <form id="register-form">
+        <form id="register-form" method="post" autocomplete="off">
             <label for="username">Username</label>
-            <input id="username" name="username" type="text" minlength="3" maxlength="30" required>
+            <input id="username" name="username" type="text" minlength="3" maxlength="30" required placeholder="Must start with a letter" autocomplete="username">
 
             <label for="display_name">Display Name</label>
-            <input id="display_name" name="display_name" type="text" maxlength="80" placeholder="Optional">
+            <input id="display_name" name="display_name" type="text" maxlength="60" placeholder="Optional" autocomplete="name">
 
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" minlength="6" required>
+            <input id="password" name="password" type="password" minlength="8" maxlength="128" required placeholder="8+ chars, letter + number/symbol" autocomplete="new-password">
 
             <button type="submit">Register</button>
         </form>
@@ -37,57 +37,6 @@
     <p class="note">Already have an account? <a href="/?login=1">Return to login</a>.</p>
     </div>
 
-    <script>
-        const form = document.getElementById('register-form');
-        const messageEl = document.getElementById('message');
-
-        function showMessage(text, type) {
-            messageEl.textContent = text;
-            messageEl.className = `message ${type}`;
-            messageEl.style.display = 'block';
-        }
-
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            messageEl.style.display = 'none';
-
-            const data = {
-                username: form.username.value.trim(),
-                display_name: form.display_name.value.trim(),
-                password: form.password.value
-            };
-
-            if (!data.username || !data.password) {
-                showMessage('Username and password are required.', 'error');
-                return;
-            }
-
-            form.querySelector('button').disabled = true;
-
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(result.error || 'Registration failed');
-                }
-
-                showMessage('Registration successful! Redirecting to login…', 'success');
-                form.reset();
-                setTimeout(() => {
-                    window.location.href = '/?login=1';
-                }, 1200);
-            } catch (error) {
-                showMessage(error.message, 'error');
-            } finally {
-                form.querySelector('button').disabled = false;
-            }
-        });
-    </script>
+    <script src="/register.js"></script>
 </body>
 </html>

@@ -7,8 +7,40 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const xss = require('xss');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+
+// Custom XSS filter options for markdown content with code blocks
+const xssOptionsForMarkdown = new xss.FilterXSS({
+    whiteList: {
+        // Allow code-related tags
+        code: [],
+        pre: [],
+        // Block potentially dangerous tags
+    },
+    stripIgnoreTag: false,
+    stripIgnoreTagBody: ['script', 'style'],
+    // Don't escape content inside code/pre tags
+    escapeHtml: (html) => {
+        // Preserve content inside backticks (inline code) and code blocks
+        return html;
+    }
+});
+
+// Simple sanitization that only removes dangerous tags but preserves < and >
+function sanitizeMarkdownContent(content) {
+    if (!content) return '';
+    // Remove script and style tags
+    let sanitized = content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    sanitized = sanitized.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    // Remove on* event handlers
+    sanitized = sanitized.replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '');
+    sanitized = sanitized.replace(/\son\w+\s*=\s*[^\s>]*/gi, '');
+    return sanitized.trim();
+}
 
 const app = express();
 
@@ -116,9 +148,46 @@ function initializeDatabase() {
 initializeDatabase();
 
 // Middleware
+// Basic security headers with CSP configuration
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: [
+                "'self'",
+                "https://cdn.jsdelivr.net",
+                "https://cdnjs.cloudflare.com"
+            ],
+            scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers for now
+            styleSrc: [
+                "'self'",
+                "'unsafe-inline'",
+                "https://cdnjs.cloudflare.com"
+            ],
+            connectSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            frameSrc: ["'self'", "https://tutoriaz.modulemore.com", "https://*.modulemore.com"]
+        }
+    }
+}));
+// CORS - keep default permissive for now (adjust in production)
 app.use(cors());
-app.use(express.json());
+// Limit JSON body size to mitigate large payload abuse
+app.use(express.json({ limit: '8kb' }));
+app.use(express.urlencoded({ extended: false, limit: '8kb' }));
 app.use(express.static('public'));
+
+// Rate limiter for auth endpoints (login / register)
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 15, // limit each IP to 15 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests from this IP, please try again later.' }
+});
 
 // Serve course documentation statically
 app.use('/docs', express.static('courses'));
@@ -1557,7 +1626,7 @@ const deleteCourseInDB = (courseId, teacherId) => {
 // REST API Routes
 
 // Login endpoint
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
     try {
         const { username, password } = req.body;
         
@@ -1600,7 +1669,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Student registration endpoint
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authLimiter, async (req, res) => {
     try {
         const { username, password, display_name } = req.body || {};
 
@@ -1609,12 +1678,35 @@ app.post('/api/register', async (req, res) => {
         }
 
         const trimmedUsername = String(username).trim().toLowerCase();
+        
+        // Username validation
         if (!/^[a-z0-9_]{3,30}$/.test(trimmedUsername)) {
             return res.status(400).json({ error: 'Username must be 3-30 characters (letters, numbers, underscore)' });
         }
+        
+        // Username must start with a letter
+        if (trimmedUsername.startsWith('_') || /^[0-9]/.test(trimmedUsername)) {
+            return res.status(400).json({ error: 'Username must start with a letter' });
+        }
+        
+        // Check reserved usernames
+        const reserved = new Set(['admin','root','system','administrator','support','null','undefined','test','demo']);
+        if (reserved.has(trimmedUsername)) {
+            return res.status(400).json({ error: 'Username not allowed' });
+        }
 
-        if (password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        // Stronger password validation (8 chars minimum, require letter + number/symbol)
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+        if (password.length > 128) {
+            return res.status(400).json({ error: 'Password too long (max 128 characters)' });
+        }
+        if (!/[a-zA-Z]/.test(password)) {
+            return res.status(400).json({ error: 'Password must contain at least one letter' });
+        }
+        if (!/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+            return res.status(400).json({ error: 'Password must contain at least one number or symbol' });
         }
 
         const existing = await new Promise((resolve, reject) => {
@@ -1631,7 +1723,11 @@ app.post('/api/register', async (req, res) => {
         const id = uuidv4();
         const hash = await bcrypt.hash(password, 10);
         const now = new Date().toISOString();
-        const displayName = (display_name && String(display_name).trim()) || trimmedUsername;
+        // Sanitize display name to remove tags/control characters and limit length
+        const rawDisplay = display_name ? String(display_name) : '';
+        let sanitizedDisplay = xss(rawDisplay).trim().slice(0, 60);
+        sanitizedDisplay = sanitizedDisplay.replace(/[\u0000-\u001F\u007F]/g, '');
+        const displayName = sanitizedDisplay || trimmedUsername;
 
         await new Promise((resolve, reject) => {
             db.run(
@@ -2735,6 +2831,24 @@ app.post('/api/quizzes', authenticateToken, async (req, res) => {
         if (!title || !question_type) {
             return res.status(400).json({ error: 'Title and question type required' });
         }
+        
+        // Basic validation and length limits (no XSS sanitization for trusted teacher content)
+        const sanitizedTitle = String(title).trim().slice(0, 200);
+        const sanitizedContent = content_text ? String(content_text).trim() : '';
+        
+        // Options array validation
+        let sanitizedOptions = [];
+        if (Array.isArray(options)) {
+            sanitizedOptions = options.map(opt => String(opt).trim().slice(0, 500)).slice(0, 20);
+        }
+        
+        // Correct answer validation
+        let sanitizedCorrectAnswer = correct_answer;
+        if (typeof correct_answer === 'string') {
+            sanitizedCorrectAnswer = correct_answer.trim().slice(0, 1000);
+        } else if (Array.isArray(correct_answer)) {
+            sanitizedCorrectAnswer = correct_answer.map(ans => String(ans).trim().slice(0, 500));
+        }
 
         if (!course_id) {
             return res.status(400).json({ error: 'Course ID required' });
@@ -2754,12 +2868,12 @@ app.post('/api/quizzes', authenticateToken, async (req, res) => {
 
         const quiz = {
             id: uuidv4(),
-            title,
-            content_text: content_text || '',
+            title: sanitizedTitle,
+            content_text: sanitizedContent,
             images: images || [],
             question_type,
-            options: options || [],
-            correct_answer: correct_answer || '',
+            options: sanitizedOptions,
+            correct_answer: sanitizedCorrectAnswer,
             category_id: category_id || null,
             course_id,
             created_by: req.user.userId,
@@ -2788,6 +2902,24 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
         
         if (!title || !question_type) {
             return res.status(400).json({ error: 'Title and question type required' });
+        }
+        
+        // Basic validation and length limits (no XSS sanitization for trusted teacher content)
+        const sanitizedTitle = String(title).trim().slice(0, 200);
+        const sanitizedContent = content_text ? String(content_text).trim() : '';
+        
+        // Options array validation
+        let sanitizedOptions = [];
+        if (Array.isArray(options)) {
+            sanitizedOptions = options.map(opt => String(opt).trim().slice(0, 500)).slice(0, 20);
+        }
+        
+        // Correct answer validation
+        let sanitizedCorrectAnswer = correct_answer;
+        if (typeof correct_answer === 'string') {
+            sanitizedCorrectAnswer = correct_answer.trim().slice(0, 1000);
+        } else if (Array.isArray(correct_answer)) {
+            sanitizedCorrectAnswer = correct_answer.map(ans => String(ans).trim().slice(0, 500));
         }
 
         let courseIdToUse = course_id || null;
@@ -2831,12 +2963,12 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
         `);
         
         stmt.run([
-            title,
-            content_text || '',
+            sanitizedTitle,
+            sanitizedContent,
             JSON.stringify(images || []),
             question_type,
-            JSON.stringify(options || []),
-            correct_answer || '',
+            JSON.stringify(sanitizedOptions),
+            typeof sanitizedCorrectAnswer === 'string' ? sanitizedCorrectAnswer : JSON.stringify(sanitizedCorrectAnswer),
             category_id || null,
             timeout_seconds || 60,
             is_scored !== undefined ? (is_scored ? 1 : 0) : 1,
