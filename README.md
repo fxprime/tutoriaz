@@ -670,7 +670,7 @@ Create `/etc/systemd/system/esp32course.service`:
 
 ```ini
 [Unit]
-Description=ESP32 Course Platform
+Description=Tutoriaz - Real-time Quiz Platform
 After=network.target
 
 [Service]

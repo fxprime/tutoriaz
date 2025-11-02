@@ -1,4 +1,4 @@
--- Initialize database schema for ESP32 course platform
+-- Initialize database schema for Tutoriaz - Real-time Quiz Platform
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
