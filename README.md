@@ -8,6 +8,7 @@
 
 - ✅ **Checkbox Questions**: Multiple-selection questions with array-based answers
 - ✅ **Markdown Support**: Full markdown rendering in questions and options (code blocks, formatting, etc.)
+- ✅ **Syntax Highlighting**: Automatic code highlighting for C++, Python, JavaScript, Arduino, and more
 - ✅ **Interactive Quiz Creation**: Preview and select correct answers directly in the form
 - ✅ **Quiz Export/Import**: 
   - Export as JSON for backup and migration
@@ -21,6 +22,7 @@
 
 ### Recent Improvements
 
+- **Syntax highlighting** for code blocks in quiz questions and options
 - Fixed checkbox question type database constraint
 - Enhanced quiz validation and error handling
 - Improved modal dialogs with proper overlay positioning
