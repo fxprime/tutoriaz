@@ -1,6 +1,6 @@
 {
   "name": "tutoriaz",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Tutoriaz classroom quiz server",
   "main": "server.js",
   "scripts": {

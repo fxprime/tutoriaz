@@ -476,6 +476,10 @@
             font-size: 12px;
             z-index: 999;
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: none; /* Hidden by default */
+        }
+        .debug-queue.active {
+            display: block; /* Show when debug mode is active */
         }
         .debug-queue h4 {
             margin-bottom: 10px;
@@ -879,8 +883,9 @@
 <body>
     <div class="header">
         <div>
-            <h1>Tutoriaz - Real-time Quiz Platform</h1>
-            <small style="color: #aaa; font-size: 11px; display: block; margin-top: -8px;">v1.0.0 • <span id="buildInfo">Loading...</span></small>
+            <h1 id="appTitle">Student Dashboard</h1>
+            <small style="color: #aaa; font-size: 11px; display: block; margin-top: 4px;"><span id="appDescription">Real-time Quiz Platform</span></small>
+            <small style="color: #aaa; font-size: 11px; display: block; margin-top: 4px;"><span id="versionInfo">Loading...</span> • <span id="buildInfo">Loading...</span></small>
         </div>
         <div class="user-info">
             <span id="studentName">Student</span>

@@ -41,10 +41,26 @@
                     baseUrl = config.baseUrl;
                     console.log('Base URL configured:', baseUrl);
                     
-                    // Update build info (version + build date)
+                    // Update page title if provided
+                    if (config.appName) {
+                        const titleEl = document.getElementById('appTitle');
+                        if (titleEl) {
+                            titleEl.textContent = `${config.appName} - Teacher Dashboard`;
+                        }
+                        document.title = `Teacher Dashboard - ${config.appName}`;
+                    }
+                    
+                    // Update version info
+                    const versionInfoEl = document.getElementById('versionInfo');
+                    if (versionInfoEl && config.version) {
+                        versionInfoEl.textContent = config.version;
+                    } else if (versionInfoEl) {
+                        versionInfoEl.textContent = 'v1.0.0';
+                    }
+                    
+                    // Update build info (build date)
                     const buildInfoEl = document.getElementById('buildInfo');
                     if (buildInfoEl) {
-                        const version = config.version || '';
                         const dateIso = config.buildDate || null;
                         let formatted = '';
                         if (dateIso) {
@@ -55,11 +71,7 @@
                                 formatted = dateIso;
                             }
                         }
-                        if (version && formatted) {
-                            buildInfoEl.textContent = `${version} • ${formatted}`;
-                        } else if (version) {
-                            buildInfoEl.textContent = version;
-                        } else if (formatted) {
+                        if (formatted) {
                             buildInfoEl.textContent = formatted;
                         } else {
                             buildInfoEl.textContent = 'Development';
@@ -445,24 +457,36 @@
                 if (docsFrame) {
                     let docsUrl = courseData.docs_repo_url;
                     
-                    // Convert localhost URLs to use current host/baseUrl
-                    if (docsUrl.includes('localhost:3030')) {
-                        docsUrl = docsUrl.replace('http://localhost:3030', baseUrl);
+                    // Check if it's a local path (starts with /)
+                    if (docsUrl.startsWith('/')) {
+                        // Local path - use as-is, browser will resolve relative to current origin
+                        console.log('Using local documentation path:', docsUrl);
                     }
-                    
-                    // If it's a GitHub repo URL, convert to GitHub Pages URL
-                    if (docsUrl.includes('github.com')) {
-                        const repoPath = docsUrl.replace('https://github.com/', '');
-                        const [owner, repo] = repoPath.split('/');
-                        docsUrl = `https://${owner}.github.io/${repo}/`;
+                    // Check if it's already a full URL (starts with http:// or https://)
+                    else if (docsUrl.startsWith('http://') || docsUrl.startsWith('https://')) {
+                        // Convert localhost URLs to use current host/baseUrl
+                        if (docsUrl.includes('localhost:3030')) {
+                            docsUrl = docsUrl.replace('http://localhost:3030', baseUrl);
+                        }
                         
-                        // Add branch/path if specified
-                        if (courseData.docs_branch && courseData.docs_branch !== 'main') {
-                            docsUrl += `${courseData.docs_branch}/`;
+                        // If it's a GitHub repo URL, convert to GitHub Pages URL
+                        if (docsUrl.includes('github.com')) {
+                            const repoPath = docsUrl.replace('https://github.com/', '');
+                            const [owner, repo] = repoPath.split('/');
+                            docsUrl = `https://${owner}.github.io/${repo}/`;
+                            
+                            // Add branch/path if specified
+                            if (courseData.docs_branch && courseData.docs_branch !== 'main') {
+                                docsUrl += `${courseData.docs_branch}/`;
+                            }
+                            if (courseData.docs_path) {
+                                docsUrl += courseData.docs_path;
+                            }
                         }
-                        if (courseData.docs_path) {
-                            docsUrl += courseData.docs_path;
-                        }
+                    }
+                    // Otherwise treat as relative path
+                    else {
+                        console.log('Treating as relative path:', docsUrl);
                     }
                     
                     docsFrame.src = docsUrl;

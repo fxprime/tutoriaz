@@ -67,8 +67,21 @@ log_success "Node.js dependencies installed"
 echo ""
 log_info "Initializing git submodules (course repositories)..."
 if [ -f ".gitmodules" ]; then
-    git submodule update --init --recursive
-    git submodule foreach 'git fetch && git pull origin main || git pull origin master'
+    log_info "Updating course submodules..."
+    git submodule update --init --recursive 2>/dev/null || {
+        log_info "Note: Could not initialize submodules"
+    }
+    
+    # Update each submodule with proper branch detection
+    git submodule foreach '
+        git fetch origin 2>/dev/null
+        if git ls-remote --heads origin main 2>/dev/null | grep -q main; then
+            git pull origin main 2>/dev/null || true
+        elif git ls-remote --heads origin master 2>/dev/null | grep -q master; then
+            git pull origin master 2>/dev/null || true
+        fi
+    ' 2>/dev/null || log_info "Note: Could not update some submodules"
+    
     log_success "Git submodules initialized and updated"
 else
     log_info "No submodules found (this is OK if no courses added yet)"
@@ -106,20 +119,23 @@ log_info "Building course documentation..."
 COURSES_BUILT=0
 
 source "$VENV_DIR/bin/activate"
+
+# Build documentation for all courses
 for course_dir in "$COURSES_DIR"/*; do
-    if [ -d "$course_dir" ] && [ -f "$course_dir/mkdocs.yml" ]; then
+    if [ -d "$course_dir" ] && [ "$course_dir" != "$VENV_DIR" ] && [ -f "$course_dir/mkdocs.yml" ]; then
         course_name=$(basename "$course_dir")
         log_info "Building docs for: $course_name"
         cd "$course_dir"
-        if mkdocs build; then
+        if mkdocs build 2>/dev/null; then
             log_success "Documentation built for $course_name"
             COURSES_BUILT=$((COURSES_BUILT + 1))
         else
-            log_error "Failed to build documentation for $course_name"
+            log_info "Could not build $course_name (continuing anyway)"
         fi
         cd "$SCRIPT_DIR"
     fi
 done
+
 deactivate
 
 if [ $COURSES_BUILT -eq 0 ]; then

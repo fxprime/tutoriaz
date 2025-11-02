@@ -14,6 +14,26 @@
             gfm: true
         });
         
+        // Initialize debug mode from URL parameter
+        let isDebugMode = false;
+        (() => {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const debugCode = urlParams.get('debugcode');
+                
+                if (debugCode === '112255') {
+                    isDebugMode = true;
+                    sessionStorage.setItem('debugMode', 'true');
+                    console.log('🐛 Debug mode activated via URL parameter');
+                } else if (sessionStorage.getItem('debugMode') === 'true') {
+                    isDebugMode = true;
+                    console.log('🐛 Debug mode active from previous session');
+                }
+            } catch (error) {
+                console.warn('Unable to check debug mode:', error);
+            }
+        })();
+
         const tabId = (() => {
             const storageKey = 'studentTabId';
             try {
@@ -71,10 +91,27 @@
                     baseUrl = config.baseUrl;
                     console.log('Base URL configured:', baseUrl);
                     
-                    // Update build info (version + build date)
+                    // Update app title
+                    const appTitleEl = document.getElementById('appTitle');
+                    if (appTitleEl && config.appName) {
+                        appTitleEl.textContent = config.appName + ' - Student Dashboard';
+                    }
+                    
+                    // Update app description
+                    const appDescEl = document.getElementById('appDescription');
+                    if (appDescEl && config.appDescription) {
+                        appDescEl.textContent = config.appDescription;
+                    }
+                    
+                    // Update version info
+                    const versionInfoEl = document.getElementById('versionInfo');
+                    if (versionInfoEl && config.version) {
+                        versionInfoEl.textContent = config.version;
+                    }
+                    
+                    // Update build info (build date)
                     const buildInfoEl = document.getElementById('buildInfo');
                     if (buildInfoEl) {
-                        const version = config.version || '';
                         const dateIso = config.buildDate || null;
                         let formatted = '';
                         if (dateIso) {
@@ -85,15 +122,7 @@
                                 formatted = dateIso;
                             }
                         }
-                        if (version && formatted) {
-                            buildInfoEl.textContent = `${version} • ${formatted}`;
-                        } else if (version) {
-                            buildInfoEl.textContent = version;
-                        } else if (formatted) {
-                            buildInfoEl.textContent = formatted;
-                        } else {
-                            buildInfoEl.textContent = 'Development';
-                        }
+                        buildInfoEl.textContent = formatted || 'Development';
                     }
                 }
             } catch (error) {
@@ -624,26 +653,38 @@
                     // Construct documentation URL
                     let docsUrl = courseData.docs_repo_url;
                     
-                    // Convert localhost URLs to use current host/baseUrl
-                    if (docsUrl.includes('localhost:3030') || docsUrl.includes('localhost') || docsUrl.includes('127.0.0.1')) {
-                        docsUrl = docsUrl.replace(/http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, baseUrl);
+                    // Check if it's a local path (starts with /)
+                    if (docsUrl.startsWith('/')) {
+                        // Local path - use as-is, browser will resolve relative to current origin
+                        console.log('Using local documentation path:', docsUrl);
                     }
-                    
-                    // If it's a GitHub repo URL (not GitHub Pages), convert to GitHub Pages URL
-                    if (docsUrl.includes('github.com') && !docsUrl.includes('github.io')) {
-                        const repoPath = docsUrl.replace('https://github.com/', '').replace('.git', '');
-                        const [owner, repo] = repoPath.split('/');
-                        if (owner && repo) {
-                            docsUrl = `https://${owner}.github.io/${repo}/`;
-                            
-                            // Add branch/path if specified
-                            if (courseData.docs_branch && courseData.docs_branch !== 'main') {
-                                docsUrl += `${courseData.docs_branch}/`;
-                            }
-                            if (courseData.docs_path) {
-                                docsUrl += courseData.docs_path;
+                    // Check if it's already a full URL (starts with http:// or https://)
+                    else if (docsUrl.startsWith('http://') || docsUrl.startsWith('https://')) {
+                        // Convert localhost URLs to use current host/baseUrl
+                        if (docsUrl.includes('localhost:3030') || docsUrl.includes('localhost') || docsUrl.includes('127.0.0.1')) {
+                            docsUrl = docsUrl.replace(/http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, baseUrl);
+                        }
+                        
+                        // If it's a GitHub repo URL (not GitHub Pages), convert to GitHub Pages URL
+                        if (docsUrl.includes('github.com') && !docsUrl.includes('github.io')) {
+                            const repoPath = docsUrl.replace('https://github.com/', '').replace('.git', '');
+                            const [owner, repo] = repoPath.split('/');
+                            if (owner && repo) {
+                                docsUrl = `https://${owner}.github.io/${repo}/`;
+                                
+                                // Add branch/path if specified
+                                if (courseData.docs_branch && courseData.docs_branch !== 'main') {
+                                    docsUrl += `${courseData.docs_branch}/`;
+                                }
+                                if (courseData.docs_path) {
+                                    docsUrl += courseData.docs_path;
+                                }
                             }
                         }
+                    }
+                    // Otherwise treat as relative path
+                    else {
+                        console.log('Treating as relative path:', docsUrl);
                     }
                     
                     docsFrame.src = docsUrl;
@@ -2045,5 +2086,45 @@
             }
         }
 
+        // Apply debug mode visibility
+        function applyDebugMode() {
+            const debugQueue = document.getElementById('debugQueue');
+            if (debugQueue) {
+                if (isDebugMode) {
+                    debugQueue.classList.add('active');
+                    console.log('🐛 Debug queue is now visible');
+                } else {
+                    debugQueue.classList.remove('active');
+                }
+            }
+        }
+
+        // Toggle debug mode (can be called from console)
+        window.toggleDebug = function(code) {
+            if (code === '112255') {
+                isDebugMode = !isDebugMode;
+                if (isDebugMode) {
+                    sessionStorage.setItem('debugMode', 'true');
+                    console.log('🐛 Debug mode ENABLED');
+                } else {
+                    sessionStorage.removeItem('debugMode');
+                    console.log('🐛 Debug mode DISABLED');
+                }
+                applyDebugMode();
+                return isDebugMode ? 'Debug mode ON' : 'Debug mode OFF';
+            } else {
+                console.warn('❌ Invalid debug code');
+                return 'Invalid code';
+            }
+        };
+
         // Initialize configuration on page load
         fetchAppConfig();
+        
+        // Apply debug mode on page load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyDebugMode);
+        } else {
+            applyDebugMode();
+        }
+

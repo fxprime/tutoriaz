@@ -852,8 +852,8 @@
 <body>
     <div class="header">
         <div>
-            <h1>Teacher Dashboard</h1>
-            <small style="color: #aaa; font-size: 11px; display: block; margin-top: -8px;">v1.0.0 • <span id="buildInfo">Loading...</span></small>
+            <h1 id="appTitle">Teacher Dashboard</h1>
+            <small style="color: #aaa; font-size: 11px; display: block; margin-top: 5px;"><span id="versionInfo">Loading...</span> • <span id="buildInfo">Loading...</span></small>
         </div>
         <div class="user-info">
             <span id="teacherName">Teacher</span>
@@ -885,9 +885,9 @@
                 <button type="button" id="generateLobbyPasskey" class="generate-btn">Generate</button>
             </div>
             <div class="form-row">
-                <label for="lobbyDocsRepoUrl">Course Documentation URL (Optional)</label>
-                <input type="url" id="lobbyDocsRepoUrl" placeholder="http://localhost:3030/docs/esp32_basic/site/">
-                <small>Full URL to documentation (e.g., http://localhost:3030/docs/course_name/site/ or https://user.github.io/repo/)</small>
+                <label for="lobbyDocsRepoUrl">Course Documentation Path (Optional)</label>
+                <input type="text" id="lobbyDocsRepoUrl" placeholder="/docs/esp32_basic/site/index.html">
+                <small>Local path (e.g., /docs/esp32_basic/site/index.html) or full URL (e.g., https://docs.example.com/)</small>
             </div>
             <div class="form-row">
                 <label for="lobbyDocsBranch">Docs Branch (for GitHub URLs)</label>
@@ -1122,9 +1122,9 @@
                     <textarea id="editCourseDescription" maxlength="500" placeholder="Optional – add details for students"></textarea>
                 </div>
                 <div class="form-row">
-                    <label for="editDocsRepoUrl">Course Documentation URL</label>
-                    <input type="url" id="editDocsRepoUrl" placeholder="http://localhost:3030/docs/esp32_basic/site/">
-                    <small>Full URL to course documentation (e.g., http://localhost:3030/docs/course_name/site/ or https://user.github.io/repo/)</small>
+                    <label for="editDocsRepoUrl">Course Documentation Path</label>
+                    <input type="text" id="editDocsRepoUrl" placeholder="/docs/esp32_basic/site/index.html">
+                    <small>Local path (e.g., /docs/esp32_basic/site/index.html) or full URL (e.g., https://docs.example.com/)</small>
                 </div>
                 <div class="form-row">
                     <label for="editDocsBranch">Documentation Branch (optional)</label>

@@ -7,3 +7,5 @@ dist/
 __pycache__/
 *.log
 .vscode/
+courses/venv
+courses/esp32_basic/site

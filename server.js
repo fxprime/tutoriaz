@@ -162,11 +162,16 @@ app.use(helmet({
             styleSrc: [
                 "'self'",
                 "'unsafe-inline'",
-                "https://cdnjs.cloudflare.com"
+                "https://cdnjs.cloudflare.com",
+                "https://fonts.googleapis.com"
             ],
             connectSrc: ["'self'"],
             imgSrc: ["'self'", "data:", "https:"],
-            fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+            fontSrc: [
+                "'self'",
+                "https://cdnjs.cloudflare.com",
+                "https://fonts.gstatic.com"
+            ],
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             frameSrc: ["'self'", "https://tutoriaz.modulemore.com", "https://*.modulemore.com"]
@@ -1996,7 +2001,9 @@ app.get('/api/config', (req, res) => {
         baseUrl: BASE_URL,
         environment: process.env.NODE_ENV || 'development',
         version: APP_VERSION ? `v${APP_VERSION}` : null,
-        buildDate: APP_BUILD_DATE || null
+        buildDate: APP_BUILD_DATE || null,
+        appName: 'Tutoriaz',
+        appDescription: 'Real-time Quiz Platform'
     });
 });
 
