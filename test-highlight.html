@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Highlight.js Test</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        pre {
+            background-color: #f6f8fa;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        pre code {
+            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            display: block;
+        }
+        code {
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            font-size: 85%;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+        }
+        .test-section h2 {
+            color: #2563eb;
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Syntax Highlighting Test</h1>
+        
+        <div class="test-section">
+            <h2>Test 1: Direct HTML (Manual highlight)</h2>
+            <pre><code class="language-cpp">int led = 13;
+void setup() {
+  pinMode(led, OUTPUT);
+}
+void loop() {
+  digitalWrite(led, HIGH);
+  delay(1000);
+  digitalWrite(led, LOW);
+  delay(1000);
+}</code></pre>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 2: Markdown Rendering (Automatic highlight)</h2>
+            <div id="markdown-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 3: Python Code</h2>
+            <div id="python-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Debug Info</h2>
+            <div id="debug"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configure marked.js
+        marked.setOptions({
+            highlight: function(code, lang) {
+                console.log('Highlight called for language:', lang);
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        const result = hljs.highlight(code, { language: lang });
+                        console.log('Highlighted successfully');
+                        return result.value;
+                    } catch (err) {
+                        console.error('Highlight.js error:', err);
+                    }
+                }
+                return hljs.highlightAuto(code).value;
+            },
+            breaks: true,
+            gfm: true
+        });
+
+        // Test 1: Manual highlighting
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+
+        // Test 2: Markdown with C++ code
+        const markdownText = `
+Here's a C++ example:
+
+\`\`\`cpp
+int a = 5;
+int b = 10;
+int sum = a + b;
+Serial.println(sum);
+\`\`\`
+
+And inline code: \`int x = 42;\`
+`;
+
+        const markdownOutput = document.getElementById('markdown-output');
+        markdownOutput.innerHTML = marked.parse(markdownText);
+        
+        // Apply highlighting after rendering
+        markdownOutput.querySelectorAll('pre code').forEach((block) => {
+            console.log('Applying highlight to markdown code block');
+            hljs.highlightElement(block);
+        });
+
+        // Test 3: Python code
+        const pythonMarkdown = `
+\`\`\`python
+def hello():
+    print("Hello, World!")
+    return True
+
+if __name__ == "__main__":
+    hello()
+\`\`\`
+`;
+
+        const pythonOutput = document.getElementById('python-output');
+        pythonOutput.innerHTML = marked.parse(pythonMarkdown);
+        pythonOutput.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+
+        // Debug info
+        const debugDiv = document.getElementById('debug');
+        debugDiv.innerHTML = `
+            <p><strong>Highlight.js loaded:</strong> ${typeof hljs !== 'undefined' ? '✅ Yes' : '❌ No'}</p>
+            <p><strong>Marked.js loaded:</strong> ${typeof marked !== 'undefined' ? '✅ Yes' : '❌ No'}</p>
+            <p><strong>C++ language available:</strong> ${hljs.getLanguage('cpp') ? '✅ Yes' : '❌ No'}</p>
+            <p><strong>Python language available:</strong> ${hljs.getLanguage('python') ? '✅ Yes' : '❌ No'}</p>
+            <p><strong>Marked options:</strong> <pre style="font-size: 11px;">${JSON.stringify(marked.defaults, null, 2)}</pre></p>
+        `;
+    </script>
+</body>
+</html>

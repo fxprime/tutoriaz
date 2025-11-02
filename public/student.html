@@ -2326,6 +2326,11 @@
                 }).join('');
 
                 body.innerHTML = summaryHtml + itemsHtml;
+                
+                // Apply syntax highlighting to code blocks in the modal
+                body.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
             }
 
             modal.classList.remove('hidden');
@@ -2414,6 +2419,10 @@
             const questionElement = document.getElementById('quizQuestion');
             try {
                 questionElement.innerHTML = marked.parse(questionContent);
+                // Apply syntax highlighting to code blocks
+                questionElement.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
             } catch (e) {
                 // Fallback if markdown parsing fails
                 questionElement.textContent = questionContent;
@@ -2519,6 +2528,11 @@
                         </div>
                     `;
                 }).join('');
+                
+                // Apply syntax highlighting to code blocks in options
+                selectAnswers.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
             } else if (quiz.question_type === 'checkbox') {
                 textAnswer.classList.add('hidden');
                 selectAnswers.classList.remove('hidden');
@@ -2539,6 +2553,11 @@
                         </div>
                     `;
                 }).join('');
+                
+                // Apply syntax highlighting to code blocks in options
+                selectAnswers.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
             }
         }
         
