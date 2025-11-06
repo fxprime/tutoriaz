@@ -346,6 +346,13 @@
             document.getElementById('rankingsModal').style.display = 'none';
         }
 
+        // Setup event listeners
+        document.getElementById('revealBtn')?.addEventListener('click', revealCorrectness);
+        document.getElementById('hideBtn')?.addEventListener('click', hideCorrectness);
+        document.getElementById('showRankingsBtn')?.addEventListener('click', showRankings);
+        document.getElementById('clearResponsesBtn')?.addEventListener('click', clearResponses);
+        document.getElementById('closeRankingsBtn')?.addEventListener('click', closeRankings);
+
         // Initialize
         if (token && (pushId || quizId)) {
             connectSocket();

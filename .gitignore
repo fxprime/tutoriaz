@@ -9,3 +9,4 @@ __pycache__/
 .vscode/
 courses/venv
 courses/esp32_basic/site
+uploads

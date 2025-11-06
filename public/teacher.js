@@ -1,17 +1,34 @@
-        // Configure marked.js to use Highlight.js for syntax highlighting
-        marked.setOptions({
-            highlight: function(code, lang) {
-                if (lang && hljs.getLanguage(lang)) {
-                    try {
-                        return hljs.highlight(code, { language: lang }).value;
-                    } catch (err) {
-                        console.error('Highlight.js error:', err);
-                    }
+        // Configure marked.js with custom renderer for better code highlighting
+        const renderer = new marked.Renderer();
+        const originalCodeRenderer = renderer.code.bind(renderer);
+        
+        renderer.code = function(code, language, isEscaped) {
+            // If a language is specified, try to highlight it
+            if (language && hljs.getLanguage(language)) {
+                try {
+                    const highlighted = hljs.highlight(code, { language: language }).value;
+                    return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+                } catch (err) {
+                    console.error('Highlight.js error:', err);
                 }
-                return hljs.highlightAuto(code).value;
-            },
+            }
+            // Auto-detect language
+            try {
+                const result = hljs.highlightAuto(code);
+                const detectedLang = result.language || 'plaintext';
+                return `<pre><code class="hljs language-${detectedLang}">${result.value}</code></pre>`;
+            } catch (err) {
+                console.error('Highlight.js auto error:', err);
+            }
+            // Fallback to default
+            return originalCodeRenderer(code, language, isEscaped);
+        };
+
+        marked.setOptions({
+            renderer: renderer,
             breaks: true,
-            gfm: true
+            gfm: true,
+            tables: true
         });
         
         let socket;
@@ -27,6 +44,7 @@
     let activePushesByQuiz = new Map();
         let teacherCourses = [];
         let selectedCourseId = null;
+        let currentCourse = null;
         let lastGeneratedPasskey = '';
         let activeStudentDetailId = null;
         let baseUrl = window.location.origin; // Default fallback
@@ -547,6 +565,7 @@
             }
 
             selectedCourseId = courseId;
+            currentCourse = course;
             localStorage.setItem('teacherSelectedCourseId', courseId);
             updateTeacherCourseHeader(course);
             showPasskeyNotice('', '');
@@ -566,6 +585,7 @@
 
             loadCategories();
             loadQuizzes();
+            loadAssignments();
             updateQueueStatus();
         }
 
@@ -1073,6 +1093,109 @@
                     });
                 }
 
+                // Setup all UI button event listeners
+                const profileBtn = document.getElementById('profileBtn');
+                if (profileBtn) profileBtn.addEventListener('click', showProfileModal);
+
+                const teacherLogoutBtn = document.getElementById('teacherLogoutBtn');
+                if (teacherLogoutBtn) teacherLogoutBtn.addEventListener('click', logout);
+
+                const exportCsvBtn = document.getElementById('exportCsvBtn');
+                if (exportCsvBtn) exportCsvBtn.addEventListener('click', showExportModal);
+
+                const pushAnswersBtn = document.getElementById('pushAnswersBtn');
+                if (pushAnswersBtn) pushAnswersBtn.addEventListener('click', showPushAnswersConfirm);
+
+                const studentScoresBtn = document.getElementById('studentScoresBtn');
+                if (studentScoresBtn) studentScoresBtn.addEventListener('click', showStudentScores);
+
+                const backToTeacherLobbyBtn = document.getElementById('backToTeacherLobbyBtn');
+                if (backToTeacherLobbyBtn) backToTeacherLobbyBtn.addEventListener('click', returnToTeacherLobby);
+
+                const manageCategoriesBtn = document.getElementById('manageCategoriesBtn');
+                if (manageCategoriesBtn) manageCategoriesBtn.addEventListener('click', showCategoryManager);
+
+                const createAssignmentBtn = document.getElementById('createAssignmentBtn');
+                if (createAssignmentBtn) createAssignmentBtn.addEventListener('click', showCreateAssignmentModal);
+
+                const toggleTeacherDocsBtn = document.getElementById('toggleTeacherDocsBtn');
+                if (toggleTeacherDocsBtn) toggleTeacherDocsBtn.addEventListener('click', toggleTeacherDocsView);
+
+                const openTeacherDocsTabBtn = document.getElementById('openTeacherDocsTabBtn');
+                if (openTeacherDocsTabBtn) openTeacherDocsTabBtn.addEventListener('click', openTeacherDocsNewTab);
+
+                const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+                if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+
+                const exportQuizzesBtn = document.getElementById('exportQuizzesBtn');
+                if (exportQuizzesBtn) exportQuizzesBtn.addEventListener('click', showExportQuizzesModal);
+
+                const importQuizzesBtn = document.getElementById('importQuizzesBtn');
+                if (importQuizzesBtn) importQuizzesBtn.addEventListener('click', showImportQuizzesModal);
+
+                const selectAllQuizzesBtn = document.getElementById('selectAllQuizzesBtn');
+                if (selectAllQuizzesBtn) selectAllQuizzesBtn.addEventListener('click', () => selectAllQuizzes(true));
+
+                const deselectAllQuizzesBtn = document.getElementById('deselectAllQuizzesBtn');
+                if (deselectAllQuizzesBtn) deselectAllQuizzesBtn.addEventListener('click', () => selectAllQuizzes(false));
+
+                const exportSelectedBtn = document.getElementById('exportSelectedBtn');
+                if (exportSelectedBtn) exportSelectedBtn.addEventListener('click', exportSelectedQuizzes);
+
+                const exportAllBtn = document.getElementById('exportAllBtn');
+                if (exportAllBtn) exportAllBtn.addEventListener('click', exportAllQuizzes);
+
+                const cancelExportQuizzesBtn = document.getElementById('cancelExportQuizzesBtn');
+                if (cancelExportQuizzesBtn) cancelExportQuizzesBtn.addEventListener('click', closeExportQuizzesModal);
+
+                const importBtn = document.getElementById('importBtn');
+                if (importBtn) importBtn.addEventListener('click', importQuizzes);
+
+                const cancelImportBtn = document.getElementById('cancelImportBtn');
+                if (cancelImportBtn) cancelImportBtn.addEventListener('click', closeImportQuizzesModal);
+
+                const closeEditCourseBtn = document.getElementById('closeEditCourseBtn');
+                if (closeEditCourseBtn) closeEditCourseBtn.addEventListener('click', closeEditCourseModal);
+
+                const cancelEditCourseBtn = document.getElementById('cancelEditCourseBtn');
+                if (cancelEditCourseBtn) cancelEditCourseBtn.addEventListener('click', closeEditCourseModal);
+
+                const closeExportCsvBtn = document.getElementById('closeExportCsvBtn');
+                if (closeExportCsvBtn) closeExportCsvBtn.addEventListener('click', closeExportModal);
+
+                const exportBasicBtn = document.getElementById('exportBasicBtn');
+                if (exportBasicBtn) exportBasicBtn.addEventListener('click', () => exportCSV('basic'));
+
+                const exportFullBtn = document.getElementById('exportFullBtn');
+                if (exportFullBtn) exportFullBtn.addEventListener('click', () => exportCSV('full'));
+
+                const cancelExportCsvBtn = document.getElementById('cancelExportCsvBtn');
+                if (cancelExportCsvBtn) cancelExportCsvBtn.addEventListener('click', closeExportModal);
+
+                const closeProfileBtn = document.getElementById('closeProfileBtn');
+                if (closeProfileBtn) closeProfileBtn.addEventListener('click', closeProfileModal);
+
+                const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+                if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', closeProfileModal);
+
+                const closeAssignmentBtn = document.getElementById('closeAssignmentBtn');
+                if (closeAssignmentBtn) closeAssignmentBtn.addEventListener('click', closeAssignmentModal);
+
+                const assignmentForm = document.getElementById('assignmentForm');
+                if (assignmentForm) assignmentForm.addEventListener('submit', saveAssignment);
+
+                const removeImageBtn = document.getElementById('removeImageBtn');
+                if (removeImageBtn) removeImageBtn.addEventListener('click', removeImage);
+
+                const cancelAssignmentBtn = document.getElementById('cancelAssignmentBtn');
+                if (cancelAssignmentBtn) cancelAssignmentBtn.addEventListener('click', closeAssignmentModal);
+
+                const closeSubmissionsBtn = document.getElementById('closeSubmissionsBtn');
+                if (closeSubmissionsBtn) closeSubmissionsBtn.addEventListener('click', closeSubmissionsModal);
+
+                const deadlineTypeSelect = document.getElementById('deadlineType');
+                if (deadlineTypeSelect) deadlineTypeSelect.addEventListener('change', toggleDeadlineFields);
+
                 renderTeacherLobby();
                 initializeSocket();
                 loadTeacherCourses();
@@ -1366,21 +1489,21 @@
                                     ${quiz.is_scored ? `| <span style="color: #28a745; font-weight: bold;">📊 ${quiz.points || 1} pts</span>` : `| <span style="color: #666;">Non-scored</span>`}
                                     ${quiz.correct_answer ? `<br>Answer: <strong>${quiz.correct_answer}</strong>` : ''}
                                 </div>
-                                <div class="quiz-actions">
-                                    <button class="btn btn-sm btn-secondary" onclick="editQuiz('${quiz.id}')">
+                                <div class="quiz-actions" data-quiz-id="${quiz.id}">
+                                    <button class="btn btn-sm btn-secondary" data-action="edit">
                                         Edit
                                     </button>
-                                    <button class="btn btn-sm btn-info" onclick="viewResponses('${quiz.id}')">
+                                    <button class="btn btn-sm btn-info" data-action="view-responses">
                                         Responses
                                     </button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteQuiz('${quiz.id}')">
+                                    <button class="btn btn-sm btn-danger" data-action="delete">
                                         Delete
                                     </button>
-                                    <button class="btn btn-sm btn-primary push-btn" onclick="pushQuiz('${quiz.id}')" ${isSent ? 'disabled' : ''}>
+                                    <button class="btn btn-sm btn-primary push-btn" data-action="push" ${isSent ? 'disabled' : ''}>
                                         ${isSent ? 'Pushed' : 'Push'}
                                     </button>
                                     ${isSent ? `
-                                        <button class="btn btn-sm undo-sent-btn" data-push-id="${activePushIdEscaped}" onclick="undoPushByQuizId('${quiz.id}', this.dataset.pushId)" title="Undo this sent quiz">
+                                        <button class="btn btn-sm undo-sent-btn" data-push-id="${activePushIdEscaped}" data-action="undo" title="Undo this sent quiz">
                                             🔙 Undo
                                         </button>
                                     ` : ''}
@@ -1392,6 +1515,54 @@
                     </div>
                 `;
             }).join('');
+            
+            // Setup event listeners for quiz actions
+            setupQuizEventListeners();
+        }
+
+        // Setup event listeners for quiz actions using event delegation
+        function setupQuizEventListeners() {
+            const quizListContainer = document.getElementById('quizList');
+            if (!quizListContainer) return;
+
+            // Remove old listener if exists
+            quizListContainer.removeEventListener('click', handleQuizActionClick);
+            // Add new listener
+            quizListContainer.addEventListener('click', handleQuizActionClick);
+        }
+
+        function handleQuizActionClick(event) {
+            const button = event.target.closest('button[data-action]');
+            if (!button) return;
+
+            const action = button.getAttribute('data-action');
+            const quizActionsDiv = button.closest('.quiz-actions');
+            const quizId = quizActionsDiv?.getAttribute('data-quiz-id');
+            
+            if (!quizId) return;
+
+            switch (action) {
+                case 'edit':
+                    editQuiz(quizId);
+                    break;
+                case 'view-responses':
+                    viewResponses(quizId);
+                    break;
+                case 'delete':
+                    deleteQuiz(quizId);
+                    break;
+                case 'push':
+                    if (!button.disabled) {
+                        pushQuiz(quizId);
+                    }
+                    break;
+                case 'undo':
+                    const pushId = button.getAttribute('data-push-id');
+                    if (pushId) {
+                        undoPushByQuizId(quizId, pushId);
+                    }
+                    break;
+            }
         }
 
         // Push quiz to students
@@ -1733,16 +1904,19 @@
                     <h4 style="margin-top: 0;">Add New Category</h4>
                     <input type="text" id="newCategoryName" placeholder="Category name" style="width: 200px; padding: 8px; margin-right: 10px;">
                     <input type="text" id="newCategoryDesc" placeholder="Description" style="width: 200px; padding: 8px; margin-right: 10px;">
-                    <button onclick="createCategory()" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Add Category</button>
+                    <button data-action="create-category" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Add Category</button>
                 </div>
                 <div id="categoryList" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
                     ${renderCategoryListHTML()}
                 </div>
-                <button onclick="closeCategoryModal()" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Close</button>
+                <button data-action="close-modal" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Close</button>
             `;
 
             modal.appendChild(content);
             document.body.appendChild(modal);
+
+            // Setup event listeners
+            content.addEventListener('click', handleCategoryModalClick);
 
             // Close on background click
             modal.addEventListener('click', (e) => {
@@ -1750,6 +1924,35 @@
                     closeCategoryModal();
                 }
             });
+        }
+
+        function handleCategoryModalClick(event) {
+            const button = event.target.closest('button[data-action]');
+            if (!button) return;
+
+            const action = button.getAttribute('data-action');
+            const categoryId = button.getAttribute('data-category-id');
+
+            switch (action) {
+                case 'create-category':
+                    createCategory();
+                    break;
+                case 'close-modal':
+                    closeCategoryModal();
+                    break;
+                case 'edit-category':
+                    editCategoryInline(categoryId);
+                    break;
+                case 'delete-category':
+                    deleteCategory(categoryId);
+                    break;
+                case 'update-category':
+                    updateCategory(categoryId);
+                    break;
+                case 'cancel-edit':
+                    cancelEditCategory(categoryId);
+                    break;
+            }
         }
 
         // Render category list HTML
@@ -1762,15 +1965,15 @@
                             <br><small style="color: #666;">${cat.description || 'No description'}</small>
                         </div>
                         <div>
-                            <button onclick="editCategoryInline('${cat.id}')" style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Edit</button>
-                            <button onclick="deleteCategory('${cat.id}')" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Delete</button>
+                            <button data-action="edit-category" data-category-id="${cat.id}" style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Edit</button>
+                            <button data-action="delete-category" data-category-id="${cat.id}" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Delete</button>
                         </div>
                     </div>
                     <div id="edit-${cat.id}" style="display: none;">
                         <input type="text" id="editName-${cat.id}" value="${cat.name}" style="width: 200px; padding: 8px; margin-right: 10px;">
                         <input type="text" id="editDesc-${cat.id}" value="${cat.description || ''}" style="width: 200px; padding: 8px; margin-right: 10px;">
-                        <button onclick="updateCategory('${cat.id}')" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Save</button>
-                        <button onclick="cancelEditCategory('${cat.id}')" style="background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                        <button data-action="update-category" data-category-id="${cat.id}" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Save</button>
+                        <button data-action="cancel-edit" data-category-id="${cat.id}" style="background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>
                     </div>
                 </div>
             `).join('');
@@ -2535,7 +2738,7 @@
             content.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h3 style="margin: 0;">Quiz Responses: ${quiz.title}</h3>
-                    <button onclick="this.closest('div').parentElement.remove()" 
+                    <button data-action="close-responses" 
                             style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
                         Close
                     </button>
@@ -2613,6 +2816,14 @@
 
             modal.appendChild(content);
             document.body.appendChild(modal);
+
+            // Setup event listeners for modal buttons
+            content.addEventListener('click', (e) => {
+                const button = e.target.closest('button[data-action]');
+                if (button?.getAttribute('data-action') === 'close-responses') {
+                    modal.remove();
+                }
+            });
 
             // Close on background click
             modal.addEventListener('click', (e) => {
@@ -2708,7 +2919,7 @@
             content.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="margin: 0;">📊 Student Scores & Rankings</h2>
-                    <button onclick="this.closest('div').parentElement.remove()" 
+                    <button data-action="close-modal" 
                             style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
                         Close
                     </button>
@@ -2724,6 +2935,14 @@
 
             modal.appendChild(content);
             document.body.appendChild(modal);
+
+            // Setup event listeners for modal buttons
+            content.addEventListener('click', (e) => {
+                const button = e.target.closest('button[data-action]');
+                if (button?.getAttribute('data-action') === 'close-modal') {
+                    modal.remove();
+                }
+            });
 
             // Close on background click
             modal.addEventListener('click', (e) => {
@@ -2793,6 +3012,533 @@
                 }
             }
         }
+
+        // ===========================
+        // IMAGE UPLOAD FUNCTIONS
+        // ===========================
+
+        function setupImageUpload() {
+            const fileInput = document.getElementById('assignmentImageFile');
+            if (fileInput) {
+                fileInput.addEventListener('change', handleImageSelect);
+            }
+        }
+
+        async function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                showNotification('Please select an image file', 'error');
+                return;
+            }
+
+            // Validate file size (10MB limit)
+            if (file.size > 10 * 1024 * 1024) {
+                showNotification('Image file must be smaller than 10MB', 'error');
+                return;
+            }
+
+            try {
+                // Show upload progress
+                document.getElementById('uploadProgress').style.display = 'block';
+                document.getElementById('uploadStatus').textContent = 'Uploading...';
+                document.getElementById('progressBar').style.width = '10%';
+
+                // Create FormData for upload
+                const formData = new FormData();
+                formData.append('image', file);
+                formData.append('type', 'assignment');
+                
+                // If editing existing assignment, include assignmentId
+                const assignmentId = document.getElementById('assignmentId').value;
+                if (assignmentId) {
+                    formData.append('assignmentId', assignmentId);
+                }
+
+                // Upload image
+                const response = await fetch('/api/upload/assignment-image', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: formData
+                });
+
+                document.getElementById('progressBar').style.width = '90%';
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Upload failed');
+                }
+
+                const result = await response.json();
+                document.getElementById('progressBar').style.width = '100%';
+                
+                // Set the image URL in hidden input
+                document.getElementById('assignmentImage').value = result.imageUrl;
+                
+                // Show preview
+                document.getElementById('previewImage').src = result.imageUrl;
+                document.getElementById('imagePreview').style.display = 'block';
+                
+                // Hide upload progress
+                setTimeout(() => {
+                    document.getElementById('uploadProgress').style.display = 'none';
+                }, 500);
+
+                // Show compression info
+                if (result.compressionRatio > 0) {
+                    showNotification(`Image uploaded and compressed by ${result.compressionRatio}%`, 'success');
+                } else {
+                    showNotification('Image uploaded successfully', 'success');
+                }
+
+            } catch (error) {
+                console.error('Image upload error:', error);
+                showNotification(error.message, 'error');
+                document.getElementById('uploadProgress').style.display = 'none';
+            }
+        }
+
+        function removeImage() {
+            // Clear the file input
+            document.getElementById('assignmentImageFile').value = '';
+            // Clear the hidden URL input
+            document.getElementById('assignmentImage').value = '';
+            // Hide preview
+            document.getElementById('imagePreview').style.display = 'none';
+            // Reset progress
+            document.getElementById('uploadProgress').style.display = 'none';
+        }
+
+        // Make removeImage available globally
+        window.removeImage = removeImage;
+
+        // ===========================
+        // ASSIGNMENT MANAGEMENT
+        // ===========================
+
+        // Load assignments for current course
+        async function loadAssignments() {
+            if (!currentCourse) return;
+
+            try {
+                const response = await fetch(`/api/courses/${currentCourse.id}/assignments`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Assignments response:', data);
+                    displayAssignments(data.assignments || []);
+                } else {
+                    console.error('Failed to load assignments');
+                    showNotification('Failed to load assignments', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading assignments:', error);
+                showNotification('Error loading assignments', 'error');
+            }
+        }
+
+        // Display assignments in the list
+        function displayAssignments(assignments) {
+            const assignmentsList = document.getElementById('assignmentsList');
+            
+            if (!assignments || assignments.length === 0) {
+                assignmentsList.innerHTML = '<p>No assignments created yet</p>';
+                return;
+            }
+
+            assignmentsList.innerHTML = assignments.map(assignment => {
+                const statusBadge = assignment.status === 'open' 
+                    ? '<span class="badge badge-open">Open</span>'
+                    : '<span class="badge badge-closed">Closed</span>';
+                
+                let deadlineText = '';
+                if (assignment.deadline_type === 'specific' && assignment.deadline_datetime) {
+                    const deadlineDate = new Date(assignment.deadline_datetime);
+                    deadlineText = `Deadline: ${deadlineDate.toLocaleString()}`;
+                } else if (assignment.deadline_type === 'duration') {
+                    const hours = assignment.deadline_duration_hours || 0;
+                    const minutes = assignment.deadline_duration_minutes || 0;
+                    deadlineText = `Deadline: ${hours}h ${minutes}m after opening`;
+                }
+
+                const submissionCount = assignment.total_submissions || 0;
+                const createdDate = new Date(assignment.created_at).toLocaleDateString();
+
+                return `
+                    <div class="assignment-card" data-assignment-id="${assignment.id}">
+                        <div class="assignment-header">
+                            <h4 class="assignment-title">${assignment.title}</h4>
+                            <div class="assignment-badges">
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="assignment-meta">
+                            <div>${deadlineText}</div>
+                            <div>Created: ${createdDate} | Submissions: ${submissionCount}</div>
+                        </div>
+                        <div class="assignment-actions">
+                            ${assignment.status === 'closed' 
+                                ? `<button class="btn btn-success" data-action="open">📂 Open</button>`
+                                : `<button class="btn btn-warning" data-action="close">🔒 Close</button>`
+                            }
+                            <button class="btn btn-primary" data-action="view-submissions">📋 View Submissions (${submissionCount})</button>
+                            <button class="btn btn-secondary" data-action="edit">✏️ Edit</button>
+                            <button class="btn btn-danger" data-action="delete">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add event delegation for assignment actions
+            setupAssignmentEventListeners();
+        }
+
+        // Setup event listeners for assignment actions using event delegation
+        function setupAssignmentEventListeners() {
+            const assignmentsList = document.getElementById('assignmentsList');
+            if (!assignmentsList) return;
+
+            // Remove old listener if exists
+            assignmentsList.removeEventListener('click', handleAssignmentClick);
+            // Add new listener
+            assignmentsList.addEventListener('click', handleAssignmentClick);
+        }
+
+        function handleAssignmentClick(event) {
+            const button = event.target.closest('button[data-action]');
+            if (!button) return;
+
+            const action = button.getAttribute('data-action');
+            const card = button.closest('.assignment-card');
+            const assignmentId = card?.getAttribute('data-assignment-id');
+            
+            if (!assignmentId) return;
+
+            switch (action) {
+                case 'open':
+                    openAssignment(assignmentId);
+                    break;
+                case 'close':
+                    closeAssignment(assignmentId);
+                    break;
+                case 'view-submissions':
+                    viewSubmissions(assignmentId);
+                    break;
+                case 'edit':
+                    editAssignment(assignmentId);
+                    break;
+                case 'delete':
+                    deleteAssignment(assignmentId);
+                    break;
+            }
+        }
+
+        // Show create assignment modal
+        function showCreateAssignmentModal() {
+            document.getElementById('assignmentModalTitle').textContent = 'Create Assignment';
+            document.getElementById('assignmentForm').reset();
+            document.getElementById('assignmentId').value = '';
+            document.getElementById('deadlineType').value = 'specific';
+            removeImage(); // Clear any previous image
+            toggleDeadlineFields();
+            setupImageUpload(); // Setup file upload handlers
+            document.getElementById('assignmentModal').classList.remove('hidden');
+        }
+
+        // Close assignment modal
+        function closeAssignmentModal() {
+            document.getElementById('assignmentModal').classList.add('hidden');
+        }
+
+        // Toggle deadline fields based on type
+        function toggleDeadlineFields() {
+            const deadlineType = document.getElementById('deadlineType').value;
+            const specificGroup = document.getElementById('specificDeadlineGroup');
+            const durationGroup = document.getElementById('durationDeadlineGroup');
+
+            if (deadlineType === 'specific') {
+                specificGroup.style.display = 'block';
+                durationGroup.style.display = 'none';
+            } else {
+                specificGroup.style.display = 'none';
+                durationGroup.style.display = 'block';
+            }
+        }
+
+        // Save assignment (create or update)
+        async function saveAssignment(event) {
+            event.preventDefault();
+
+            const assignmentId = document.getElementById('assignmentId').value;
+            const deadlineType = document.getElementById('deadlineType').value;
+
+            const assignmentData = {
+                title: document.getElementById('assignmentTitle').value,
+                description: document.getElementById('assignmentDescription').value,
+                deadline_type: deadlineType,
+                image_path: document.getElementById('assignmentImage').value || null,
+                auto_close: document.getElementById('autoClose').checked
+            };
+
+            if (deadlineType === 'specific') {
+                assignmentData.deadline_datetime = document.getElementById('deadlineDatetime').value || null;
+            } else {
+                assignmentData.deadline_duration_hours = parseInt(document.getElementById('deadlineHours').value) || 0;
+                assignmentData.deadline_duration_minutes = parseInt(document.getElementById('deadlineMinutes').value) || 0;
+            }
+
+            try {
+                let response;
+                if (assignmentId) {
+                    // Update existing assignment
+                    response = await fetch(`/api/assignments/${assignmentId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        },
+                        body: JSON.stringify(assignmentData)
+                    });
+                } else {
+                    // Create new assignment
+                    response = await fetch('/api/assignments', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        },
+                        body: JSON.stringify({
+                            ...assignmentData,
+                            course_id: currentCourse.id
+                        })
+                    });
+                }
+
+                if (response.ok) {
+                    showNotification(assignmentId ? 'Assignment updated successfully' : 'Assignment created successfully', 'success');
+                    closeAssignmentModal();
+                    loadAssignments();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Failed to save assignment', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving assignment:', error);
+                showNotification('Error saving assignment', 'error');
+            }
+        }
+
+        // Open assignment
+        async function openAssignment(assignmentId) {
+            if (!confirm('Open this assignment for students?')) return;
+
+            try {
+                const response = await fetch(`/api/assignments/${assignmentId}/status`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ status: 'open' })
+                });
+
+                if (response.ok) {
+                    showNotification('Assignment opened', 'success');
+                    loadAssignments();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Failed to open assignment', 'error');
+                }
+            } catch (error) {
+                console.error('Error opening assignment:', error);
+                showNotification('Error opening assignment', 'error');
+            }
+        }
+
+        // Close assignment
+        async function closeAssignment(assignmentId) {
+            if (!confirm('Close this assignment? Students will no longer be able to submit.')) return;
+
+            try {
+                const response = await fetch(`/api/assignments/${assignmentId}/status`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ status: 'closed' })
+                });
+
+                if (response.ok) {
+                    showNotification('Assignment closed', 'success');
+                    loadAssignments();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Failed to close assignment', 'error');
+                }
+            } catch (error) {
+                console.error('Error closing assignment:', error);
+                showNotification('Error closing assignment', 'error');
+            }
+        }
+
+        // Edit assignment
+        async function editAssignment(assignmentId) {
+            try {
+                const response = await fetch(`/api/courses/${currentCourse.id}/assignments`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const assignment = data.assignments.find(a => a.id === assignmentId);
+                    
+                    if (assignment) {
+                        document.getElementById('assignmentModalTitle').textContent = 'Edit Assignment';
+                        document.getElementById('assignmentId').value = assignment.id;
+                        document.getElementById('assignmentTitle').value = assignment.title;
+                        document.getElementById('assignmentDescription').value = assignment.description || '';
+                        document.getElementById('deadlineType').value = assignment.deadline_type;
+                        document.getElementById('assignmentImage').value = assignment.image_path || '';
+                        document.getElementById('autoClose').checked = assignment.auto_close === 1;
+
+                        // Handle existing image
+                        if (assignment.image_path) {
+                            document.getElementById('previewImage').src = assignment.image_path;
+                            document.getElementById('imagePreview').style.display = 'block';
+                        } else {
+                            removeImage();
+                        }
+
+                        if (assignment.deadline_type === 'specific') {
+                            document.getElementById('deadlineDatetime').value = assignment.deadline_datetime || '';
+                        } else {
+                            document.getElementById('deadlineHours').value = assignment.deadline_duration_hours || 0;
+                            document.getElementById('deadlineMinutes').value = assignment.deadline_duration_minutes || 0;
+                        }
+
+                        toggleDeadlineFields();
+                        setupImageUpload();
+                        document.getElementById('assignmentModal').classList.remove('hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading assignment:', error);
+                showNotification('Error loading assignment', 'error');
+            }
+        }
+
+        // Delete assignment
+        async function deleteAssignment(assignmentId) {
+            if (!confirm('Delete this assignment? This will also delete all submissions.')) return;
+
+            try {
+                const response = await fetch(`/api/assignments/${assignmentId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                if (response.ok) {
+                    showNotification('Assignment deleted', 'success');
+                    loadAssignments();
+                } else {
+                    const error = await response.json();
+                    showNotification(error.error || 'Failed to delete assignment', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting assignment:', error);
+                showNotification('Error deleting assignment', 'error');
+            }
+        }
+
+        // View submissions for an assignment
+        async function viewSubmissions(assignmentId) {
+            try {
+                const response = await fetch(`/api/assignments/${assignmentId}/submissions`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Get assignment title from the loaded assignments
+                    const assignment = document.querySelector(`[onclick*="${assignmentId}"]`)?.closest('.assignment-card')?.querySelector('.assignment-title')?.textContent || 'Assignment';
+                    
+                    displaySubmissions(data.submissions, assignment);
+                    document.getElementById('submissionsModal').classList.remove('hidden');
+                } else {
+                    showNotification('Failed to load submissions', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading submissions:', error);
+                showNotification('Error loading submissions', 'error');
+            }
+        }
+
+        // Display submissions in modal
+        function displaySubmissions(submissions, assignmentTitle) {
+            document.getElementById('submissionsModalTitle').textContent = `Submissions: ${assignmentTitle}`;
+            const submissionsList = document.getElementById('submissionsList');
+
+            if (!submissions || submissions.length === 0) {
+                submissionsList.innerHTML = '<p>No submissions yet</p>';
+                return;
+            }
+
+            submissionsList.innerHTML = submissions.map(submission => {
+                const submittedDate = new Date(submission.submitted_at).toLocaleString();
+                const lateBadge = submission.is_late ? '<span class="badge" style="background: #fef3c7; color: #f59e0b;">Late</span>' : '';
+                
+                // Render markdown content with syntax highlighting
+                const renderedContent = marked.parse(submission.content || 'No content provided');
+
+                return `
+                    <div class="submission-card">
+                        <div class="submission-header">
+                            <div>
+                                <div class="submission-student">${submission.display_name || submission.username} (${submission.username})</div>
+                                <div style="color: #6b7280; font-size: 14px;">Submitted: ${submittedDate} ${lateBadge}</div>
+                            </div>
+                        </div>
+                        <div class="submission-content markdown-content">
+                            ${renderedContent}
+                        </div>
+                        ${submission.image_path ? `<img src="${submission.image_path}" class="submission-image" alt="Submission attachment">` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Close submissions modal
+        function closeSubmissionsModal() {
+            document.getElementById('submissionsModal').classList.add('hidden');
+        }
+
+        // Make assignment functions globally available
+        window.showCreateAssignmentModal = showCreateAssignmentModal;
+        window.closeAssignmentModal = closeAssignmentModal;
+        window.toggleDeadlineFields = toggleDeadlineFields;
+        window.saveAssignment = saveAssignment;
+        window.openAssignment = openAssignment;
+        window.closeAssignment = closeAssignment;
+        window.editAssignment = editAssignment;
+        window.deleteAssignment = deleteAssignment;
+        window.viewSubmissions = viewSubmissions;
+        window.closeSubmissionsModal = closeSubmissionsModal;
 
         // Logout
         function logout() {

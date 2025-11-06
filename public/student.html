@@ -413,6 +413,36 @@
             font-family: 'Courier New', monospace;
             font-size: 0.95em;
         }
+        
+        /* Quiz markdown table styles */
+        .quiz-question table,
+        .option-item label table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .quiz-question th,
+        .quiz-question td,
+        .option-item label th,
+        .option-item label td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        .quiz-question th,
+        .option-item label th {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+        
+        .quiz-question tr:nth-child(even),
+        .option-item label tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        
         .quiz-actions {
             display: flex;
             justify-content: space-between;
@@ -867,6 +897,261 @@
         .answer-item.incorrect .answer-value {
             border-color: #fca5a5;
         }
+
+        /* Markdown Content Styles */
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+            border: 1px solid #e5e7eb;
+        }
+
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .markdown-content th {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+
+        .markdown-content tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .markdown-content h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+
+        .markdown-content h3 {
+            font-size: 1.25em;
+        }
+
+        .markdown-content pre {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        .markdown-content code {
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            font-size: 85%;
+        }
+
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+            font-size: 13px;
+        }
+
+        /* Assignment Styles */
+        .assignments-section {
+            margin-top: 30px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .assignments-section h3 {
+            margin-bottom: 20px;
+            color: #1f2937;
+            font-size: 20px;
+        }
+
+        .assignments-list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .assignment-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+
+        .assignment-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #3b82f6;
+        }
+
+        .assignment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .assignment-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .assignment-meta {
+            color: #6b7280;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+
+        .assignment-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .assignment-actions button {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .badge-warning {
+            background: #fef3c7;
+            color: #f59e0b;
+        }
+
+        .badge-danger {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px 20px 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #1f2937;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0;
+        }
+
+        .modal-close:hover {
+            color: #374151;
+        }
+
+        .assignment-description {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px;
+            margin-bottom: 16px;
+        }
+
+        .assignment-deadline {
+            padding: 12px;
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            margin: 20px;
+            margin-bottom: 16px;
+            border-radius: 4px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .text-muted {
+            color: #6b7280;
+            font-style: italic;
+        }
     </style>
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
@@ -890,7 +1175,7 @@
         <div class="user-info">
             <span id="studentName">Student</span>
             <div class="status-indicator" id="connectionStatus">Connected</div>
-            <button class="logout-btn" onclick="logout()">Logout</button>
+            <button class="logout-btn" id="logoutBtn">Logout</button>
         </div>
     </div>
 
@@ -919,16 +1204,16 @@
                     <p id="activeCourseTeacher" class="course-meta-line"></p>
                     <p id="courseDescriptionText" class="course-description">Select an enrolled course from the lobby to see its details and materials.</p>
                 </div>
-                <button class="back-to-lobby-btn" onclick="returnToLobby()">Back to Lobby</button>
+                <button class="back-to-lobby-btn" id="backToLobbyBtn">Back to Lobby</button>
             </div>
 
             <!-- Debug Quiz History Table -->
             <div class="debug-history" id="debugHistory">
                 <h3>
                     🐛 Quiz History Debug 
-                    <button class="debug-toggle-btn" onclick="toggleDebugHistory()">Hide</button>
-                    <button class="debug-refresh-btn" onclick="refreshDebugHistory()">🔄 Refresh</button>
-                    <button class="debug-cleanup-btn" onclick="cleanupOrphanedQuizzes()">🧹 Cleanup</button>
+                    <button class="debug-toggle-btn" id="debugToggleBtn">Hide</button>
+                    <button class="debug-refresh-btn" id="debugRefreshBtn">🔄 Refresh</button>
+                    <button class="debug-cleanup-btn" id="debugCleanupBtn">🧹 Cleanup</button>
                 </h3>
                 <div id="debugHistoryContent">
                     <p>Loading quiz history...</p>
@@ -941,11 +1226,19 @@
                         <div class="docs-header">
                             <h3>📚 Course Documentation (LIVE)</h3>
                             <div class="docs-controls">
-                                <button class="docs-btn" onclick="toggleDocsView()">Hide Docs</button>
-                                <button class="docs-btn" onclick="openDocsNewTab()" title="Open in new tab">📋</button>
+                                <button class="docs-btn" id="toggleDocsBtn">Hide Docs</button>
+                                <button class="docs-btn" id="openDocsTabBtn" title="Open in new tab">📋</button>
                             </div>
                         </div>
                         <iframe id="courseDocsFrame" class="course-docs-frame" src=""></iframe>
+                    </div>
+
+                    <!-- Assignments Section -->
+                    <div id="assignmentsSection" class="assignments-section hidden">
+                        <h3>📝 Assignments</h3>
+                        <div id="studentAssignmentsList" class="assignments-list">
+                            <!-- Assignments will be loaded here -->
+                        </div>
                     </div>
                     
                     <!-- Default course content removed - will be replaced with iframe documentation -->
@@ -966,7 +1259,7 @@
             <div id="quizMessages"></div>
             
             <div class="quiz-content">
-                <div class="quiz-question" id="quizQuestion">Question content will appear here</div>
+                <div class="quiz-question markdown-content" id="quizQuestion">Question content will appear here</div>
                 <div class="quiz-images" id="quizImages"></div>
                 
                 <div class="answer-section">
@@ -984,7 +1277,7 @@
                 <div class="quiz-info">
                     Answer within the time limit to participate
                 </div>
-                <button class="submit-btn" id="submitAnswer" onclick="submitAnswer()">
+                <button class="submit-btn" id="submitAnswer">
                     Submit Answer
                 </div>
             </div>
@@ -1023,11 +1316,51 @@
         <div class="answers-modal">
             <div class="answers-modal-header">
                 <h2>📋 Quiz Results</h2>
-                <button class="answers-modal-close" onclick="closeAnswersModal()">&times;</button>
+                <button class="answers-modal-close" id="closeAnswersBtn">&times;</button>
             </div>
             <div class="answers-modal-body" id="answersModalBody">
                 <!-- Answer items will be inserted here -->
             </div>
+        </div>
+    </div>
+
+    <!-- Submit Assignment Modal -->
+    <div id="submitAssignmentModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 id="submitAssignmentTitle">Submit Assignment</h2>
+                <button class="modal-close" id="closeSubmitModalBtn">&times;</button>
+            </div>
+            <div id="submitAssignmentDescription" class="assignment-description markdown-content"></div>
+            <div id="submitAssignmentDeadline" class="assignment-deadline"></div>
+            <form id="submitAssignmentForm" style="padding: 20px;">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Your Answer (Markdown supported)</label>
+                    <textarea id="submissionContent" rows="10" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace;"></textarea>
+                    <small style="color: #6b7280;">Use markdown: **bold**, *italic*, `code`, etc.</small>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Image Attachment (optional)</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <input type="file" id="submissionImageFile" accept="image/*" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <div id="studentImagePreview" style="display: none;">
+                            <img id="studentPreviewImage" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 4px; border: 1px solid #e5e7eb;">
+                            <button type="button" id="removeStudentImageBtn" style="margin-left: 10px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 12px;">Remove</button>
+                        </div>
+                        <div id="studentUploadProgress" style="display: none;">
+                            <div style="background: #e5e7eb; border-radius: 4px; overflow: hidden;">
+                                <div id="studentProgressBar" style="background: #3b82f6; height: 8px; width: 0%; transition: width 0.3s;"></div>
+                            </div>
+                            <small id="studentUploadStatus" style="color: #6b7280;">Uploading...</small>
+                        </div>
+                    </div>
+                    <input type="hidden" id="submissionImage" name="image_path">
+                </div>
+                <div style="display: grid; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 6px;">💾 Submit Assignment</button>
+                    <button type="button" id="cancelSubmitModalBtn" style="width: 100%; padding: 12px; background: #e5e7eb; color: #374151; border: none; border-radius: 6px;">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 </body>

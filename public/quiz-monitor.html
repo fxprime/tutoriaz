@@ -281,16 +281,16 @@
         </div>
 
         <div class="controls">
-            <button class="btn btn-success" id="revealBtn" onclick="revealCorrectness()">
+            <button class="btn btn-success" id="revealBtn">
                 🔍 Reveal All Correctness
             </button>
-            <button class="btn btn-danger" id="hideBtn" onclick="hideCorrectness()" style="display: none;">
+            <button class="btn btn-danger" id="hideBtn" style="display: none;">
                 👁️ Hide Correctness
             </button>
-            <button class="btn btn-primary" onclick="showRankings()">
+            <button class="btn btn-primary" id="showRankingsBtn">
                 🏆 Course Rankings
             </button>
-            <button class="btn btn-primary" onclick="clearResponses()">
+            <button class="btn btn-primary" id="clearResponsesBtn">
                 🗑️ Clear
             </button>
         </div>
@@ -307,7 +307,7 @@
         <div style="max-width: 900px; margin: 40px auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0;">
                 <h2 style="font-size: 28px; font-weight: bold; color: #1a202c;">🏆 Course Rankings</h2>
-                <button onclick="closeRankings()" style="background: #e2e8f0; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; cursor: pointer; color: #4a5568;">×</button>
+                <button id="closeRankingsBtn" style="background: #e2e8f0; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; cursor: pointer; color: #4a5568;">×</button>
             </div>
             <div id="rankingsContent" style="min-height: 200px;">
                 <div style="text-align: center; padding: 40px; color: #718096;">

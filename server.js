@@ -12,6 +12,8 @@ const rateLimit = require('express-rate-limit');
 const xss = require('xss');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const multer = require('multer');
+const sharp = require('sharp');
 
 // Custom XSS filter options for markdown content with code blocks
 const xssOptionsForMarkdown = new xss.FilterXSS({
@@ -142,6 +144,55 @@ function initializeDatabase() {
                 });
             }
         });
+
+        // Assignment tables
+        db.run(`
+            CREATE TABLE IF NOT EXISTS assignments (
+                id TEXT PRIMARY KEY,
+                course_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'closed',
+                opened_at TEXT,
+                deadline_type TEXT NOT NULL DEFAULT 'specific',
+                deadline_datetime TEXT,
+                deadline_duration_hours INTEGER,
+                deadline_duration_minutes INTEGER,
+                auto_close BOOLEAN DEFAULT 1,
+                image_path TEXT,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS assignment_submissions (
+                id TEXT PRIMARY KEY,
+                assignment_id TEXT NOT NULL,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                image_path TEXT,
+                submitted_at TEXT NOT NULL,
+                is_late BOOLEAN DEFAULT 0,
+                score REAL,
+                feedback TEXT,
+                graded_at TEXT,
+                graded_by TEXT,
+                FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+                FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+                FOREIGN KEY (graded_by) REFERENCES users(id) ON DELETE SET NULL,
+                UNIQUE(assignment_id, student_id)
+            )
+        `);
+
+        db.run(`CREATE INDEX IF NOT EXISTS idx_assignments_course ON assignments(course_id)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_assignment_submissions_assignment ON assignment_submissions(assignment_id)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_assignment_submissions_student ON assignment_submissions(student_id)`);
     });
 }
 
@@ -158,15 +209,15 @@ app.use(helmet({
                 "https://cdn.jsdelivr.net",
                 "https://cdnjs.cloudflare.com"
             ],
-            scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers for now
+            // Removed scriptSrcAttr unsafe-inline - using proper event listeners now
             styleSrc: [
                 "'self'",
-                "'unsafe-inline'",
+                "'unsafe-inline'", // Keep for inline styles (less risky than inline scripts)
                 "https://cdnjs.cloudflare.com",
                 "https://fonts.googleapis.com"
             ],
             connectSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "https:"],
+            imgSrc: ["'self'", "data:", "https:", "blob:"],
             fontSrc: [
                 "'self'",
                 "https://cdnjs.cloudflare.com",
@@ -196,6 +247,71 @@ const authLimiter = rateLimit({
 
 // Serve course documentation statically
 app.use('/docs', express.static('courses'));
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+const assignmentsUploadsDir = path.join(uploadsDir, 'assignments');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(assignmentsUploadsDir)) {
+    fs.mkdirSync(assignmentsUploadsDir, { recursive: true });
+}
+
+// Serve uploaded files statically
+app.use('/uploads', express.static('uploads'));
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage(); // Store in memory for processing
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit before compression
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept images only
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'), false);
+        }
+    }
+});
+
+// Image compression function
+async function compressImage(buffer, filename) {
+    try {
+        const image = sharp(buffer);
+        const metadata = await image.metadata();
+        
+        // Scale down if too large (max 800px width/height)
+        let processedImage = image;
+        if (metadata.width > 800 || metadata.height > 800) {
+            processedImage = image.resize(800, 800, {
+                fit: 'inside',
+                withoutEnlargement: true
+            });
+        }
+        
+        // Always convert to WebP for better compression
+        // WebP provides 25-35% better compression than JPEG/PNG
+        const compressed = await processedImage
+            .webp({ 
+                quality: 80,
+                effort: 4  // Compression effort (0-6), 4 is good balance
+            })
+            .toBuffer();
+        
+        // Return buffer and new filename with .webp extension
+        const nameWithoutExt = path.basename(filename, path.extname(filename));
+        const newFilename = `${nameWithoutExt}.webp`;
+        
+        return { buffer: compressed, filename: newFilename };
+    } catch (error) {
+        console.error('Image compression error:', error);
+        throw new Error('Failed to process image');
+    }
+}
 
 const resolvePath = (value) => {
     if (!value) {
@@ -5268,6 +5384,622 @@ const updateOnlineList = () => {
         console.error('updateOnlineList error:', err);
     });
 };
+
+// ==================== IMAGE UPLOAD ROUTES ====================
+
+// Upload image for assignments
+app.post('/api/upload/assignment-image', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        const { assignmentId, type } = req.body; // type: 'assignment' or 'submission'
+
+        // Compress and convert to WebP
+        const result = await compressImage(req.file.buffer, req.file.originalname);
+        
+        // Generate filename with assignmentId prefix for easy cleanup
+        // Format: {assignmentId}_{uuid}.webp
+        const fileId = uuidv4();
+        const prefix = assignmentId || 'temp';
+        const filename = `${prefix}_${fileId}.webp`;
+        
+        // Organize files by type and ID
+        let subDir;
+        if (type === 'submission' && assignmentId) {
+            // uploads/assignments/{assignmentId}/submissions/
+            subDir = path.join('assignments', assignmentId, 'submissions');
+        } else if (type === 'assignment' && assignmentId) {
+            // uploads/assignments/{assignmentId}/
+            subDir = path.join('assignments', assignmentId);
+        } else {
+            // uploads/assignments/temp/ (for new assignments being created)
+            subDir = path.join('assignments', 'temp');
+        }
+        
+        const uploadDir = path.join(uploadsDir, subDir);
+        
+        // Create directory if it doesn't exist
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        
+        const filepath = path.join(uploadDir, filename);
+
+        // Save compressed image to disk
+        await fs.promises.writeFile(filepath, result.buffer);
+
+        // Return the URL path
+        const imageUrl = `/uploads/${subDir.replace(/\\/g, '/')}/${filename}`;
+        
+        console.log(`Uploaded and converted to WebP: ${req.file.originalname} -> ${subDir}/${filename} (${result.buffer.length} bytes, ${Math.round((1 - result.buffer.length / req.file.size) * 100)}% smaller)`);
+        
+        res.json({ 
+            success: true, 
+            imageUrl,
+            originalSize: req.file.size,
+            compressedSize: result.buffer.length,
+            compressionRatio: Math.round((1 - result.buffer.length / req.file.size) * 100),
+            format: 'webp'
+        });
+    } catch (error) {
+        console.error('Image upload error:', error);
+        res.status(500).json({ error: 'Failed to upload image' });
+    }
+});
+
+// ==================== ASSIGNMENT ROUTES ====================
+
+// Helper: Calculate deadline from assignment
+function calculateAssignmentDeadline(assignment) {
+    if (!assignment.opened_at) return null;
+    
+    if (assignment.deadline_type === 'specific' && assignment.deadline_datetime) {
+        return assignment.deadline_datetime;
+    } else if (assignment.deadline_type === 'duration') {
+        const openedTime = new Date(assignment.opened_at);
+        const hours = assignment.deadline_duration_hours || 0;
+        const minutes = assignment.deadline_duration_minutes || 0;
+        const deadline = new Date(openedTime.getTime() + (hours * 60 + minutes) * 60 * 1000);
+        return deadline.toISOString();
+    }
+    return null;
+}
+
+// Helper: Check if assignment is past deadline
+function isAssignmentPastDeadline(assignment) {
+    const deadline = calculateAssignmentDeadline(assignment);
+    if (!deadline) return false;
+    return new Date() > new Date(deadline);
+}
+
+// Create assignment (teacher only)
+app.post('/api/assignments', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const {
+            course_id,
+            title,
+            description,
+            deadline_type,
+            deadline_datetime,
+            deadline_duration_hours,
+            deadline_duration_minutes,
+            auto_close,
+            image_path
+        } = req.body;
+
+        if (!course_id || !title || !description) {
+            return res.status(400).json({ error: 'Course ID, title, and description are required' });
+        }
+
+        // Verify teacher owns the course
+        const course = await getCourseById(course_id);
+        if (!course || course.created_by !== req.user.userId) {
+            return res.status(404).json({ error: 'Course not found or access denied' });
+        }
+
+        const assignment = {
+            id: uuidv4(),
+            course_id,
+            title: String(title).trim(),
+            description: String(description).trim(),
+            created_by: req.user.userId,
+            created_at: new Date().toISOString(),
+            status: 'closed',
+            opened_at: null,
+            deadline_type: deadline_type || 'specific',
+            deadline_datetime: deadline_datetime || null,
+            deadline_duration_hours: deadline_duration_hours || null,
+            deadline_duration_minutes: deadline_duration_minutes || null,
+            auto_close: auto_close !== false,
+            image_path: image_path || null
+        };
+
+        await new Promise((resolve, reject) => {
+            db.run(`
+                INSERT INTO assignments (
+                    id, course_id, title, description, created_by, created_at,
+                    status, opened_at, deadline_type, deadline_datetime,
+                    deadline_duration_hours, deadline_duration_minutes,
+                    auto_close, image_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                assignment.id, assignment.course_id, assignment.title,
+                assignment.description, assignment.created_by, assignment.created_at,
+                assignment.status, assignment.opened_at, assignment.deadline_type,
+                assignment.deadline_datetime, assignment.deadline_duration_hours,
+                assignment.deadline_duration_minutes, assignment.auto_close ? 1 : 0,
+                assignment.image_path
+            ], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        res.status(201).json({ assignment });
+    } catch (error) {
+        console.error('Create assignment error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get assignments for a course
+app.get('/api/courses/:courseId/assignments', authenticateToken, async (req, res) => {
+    try {
+        const { courseId } = req.params;
+
+        // Check if user has access to this course
+        if (req.user.role === 'teacher') {
+            const course = await getCourseById(courseId);
+            if (!course || course.created_by !== req.user.userId) {
+                return res.status(404).json({ error: 'Course not found or access denied' });
+            }
+        } else if (req.user.role === 'student') {
+            // Check if student is enrolled
+            const isEnrolled = await new Promise((resolve, reject) => {
+                db.get(`
+                    SELECT 1 FROM course_enrollments
+                    WHERE course_id = ? AND student_id = ?
+                `, [courseId, req.user.userId], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(!!row);
+                });
+            });
+
+            if (!isEnrolled) {
+                return res.status(403).json({ error: 'Not enrolled in this course' });
+            }
+        }
+
+        const assignments = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT 
+                    a.*,
+                    u.username as creator_username,
+                    u.display_name as creator_display_name
+                FROM assignments a
+                JOIN users u ON a.created_by = u.id
+                WHERE a.course_id = ?
+                ORDER BY a.created_at DESC
+            `, [courseId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        // For students, only show open assignments and add submission status
+        if (req.user.role === 'student') {
+            const openAssignments = assignments.filter(a => a.status === 'open');
+            
+            // Get submission status for each assignment
+            const assignmentsWithStatus = await Promise.all(openAssignments.map(async (assignment) => {
+                const submission = await new Promise((resolve, reject) => {
+                    db.get(`
+                        SELECT id, submitted_at, is_late, score
+                        FROM assignment_submissions
+                        WHERE assignment_id = ? AND student_id = ?
+                    `, [assignment.id, req.user.userId], (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    });
+                });
+
+                const deadline = calculateAssignmentDeadline(assignment);
+                const isPastDeadline = deadline && new Date() > new Date(deadline);
+
+                return {
+                    ...assignment,
+                    deadline,
+                    is_past_deadline: isPastDeadline,
+                    has_submitted: !!submission,
+                    submission
+                };
+            }));
+
+            return res.json({ assignments: assignmentsWithStatus });
+        }
+
+        // For teachers, add submission counts
+        const assignmentsWithCounts = await Promise.all(assignments.map(async (assignment) => {
+            const stats = await new Promise((resolve, reject) => {
+                db.get(`
+                    SELECT 
+                        COUNT(*) as total_submissions,
+                        SUM(CASE WHEN is_late = 0 THEN 1 ELSE 0 END) as on_time_count,
+                        SUM(CASE WHEN is_late = 1 THEN 1 ELSE 0 END) as late_count
+                    FROM assignment_submissions
+                    WHERE assignment_id = ?
+                `, [assignment.id], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row || { total_submissions: 0, on_time_count: 0, late_count: 0 });
+                });
+            });
+
+            const deadline = calculateAssignmentDeadline(assignment);
+
+            return {
+                ...assignment,
+                deadline,
+                is_past_deadline: isAssignmentPastDeadline(assignment),
+                ...stats
+            };
+        }));
+
+        res.json({ assignments: assignmentsWithCounts });
+    } catch (error) {
+        console.error('Get assignments error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Open/Close assignment (teacher only)
+app.patch('/api/assignments/:assignmentId/status', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { assignmentId } = req.params;
+        const { status } = req.body;
+
+        if (!status || !['open', 'closed'].includes(status)) {
+            return res.status(400).json({ error: 'Valid status required (open or closed)' });
+        }
+
+        // Get assignment and verify ownership
+        const assignment = await new Promise((resolve, reject) => {
+            db.get(`
+                SELECT a.*, c.created_by as course_owner
+                FROM assignments a
+                JOIN courses c ON a.course_id = c.id
+                WHERE a.id = ?
+            `, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!assignment || assignment.course_owner !== req.user.userId) {
+            return res.status(404).json({ error: 'Assignment not found or access denied' });
+        }
+
+        const updates = {
+            status,
+            opened_at: status === 'open' && !assignment.opened_at ? new Date().toISOString() : assignment.opened_at
+        };
+
+        await new Promise((resolve, reject) => {
+            db.run(`
+                UPDATE assignments
+                SET status = ?, opened_at = ?
+                WHERE id = ?
+            `, [updates.status, updates.opened_at, assignmentId], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        // Get updated assignment
+        const updatedAssignment = await new Promise((resolve, reject) => {
+            db.get(`SELECT * FROM assignments WHERE id = ?`, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        const deadline = calculateAssignmentDeadline(updatedAssignment);
+
+        // Notify students in this course via socket
+        io.to(`course:${assignment.course_id}`).emit('assignment_status_changed', {
+            assignment_id: assignmentId,
+            status,
+            deadline
+        });
+
+        res.json({ 
+            assignment: {
+                ...updatedAssignment,
+                deadline
+            }
+        });
+    } catch (error) {
+        console.error('Update assignment status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Submit assignment (student only)
+app.post('/api/assignments/:assignmentId/submit', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'student') {
+            return res.status(403).json({ error: 'Student access required' });
+        }
+
+        const { assignmentId } = req.params;
+        const { content, image_path } = req.body;
+
+        if (!content || !String(content).trim()) {
+            return res.status(400).json({ error: 'Submission content required' });
+        }
+
+        // Get assignment
+        const assignment = await new Promise((resolve, reject) => {
+            db.get(`SELECT * FROM assignments WHERE id = ?`, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!assignment) {
+            return res.status(404).json({ error: 'Assignment not found' });
+        }
+
+        if (assignment.status !== 'open') {
+            return res.status(400).json({ error: 'Assignment is not open' });
+        }
+
+        // Check if student is enrolled
+        const isEnrolled = await new Promise((resolve, reject) => {
+            db.get(`
+                SELECT 1 FROM course_enrollments
+                WHERE course_id = ? AND student_id = ?
+            `, [assignment.course_id, req.user.userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(!!row);
+            });
+        });
+
+        if (!isEnrolled) {
+            return res.status(403).json({ error: 'Not enrolled in this course' });
+        }
+
+        const now = new Date();
+        const deadline = calculateAssignmentDeadline(assignment);
+        const isLate = deadline ? now > new Date(deadline) : false;
+
+        const submission = {
+            id: uuidv4(),
+            assignment_id: assignmentId,
+            student_id: req.user.userId,
+            course_id: assignment.course_id,
+            content: String(content).trim(),
+            image_path: image_path || null,
+            submitted_at: now.toISOString(),
+            is_late: isLate ? 1 : 0
+        };
+
+        // Insert or replace submission
+        await new Promise((resolve, reject) => {
+            db.run(`
+                INSERT OR REPLACE INTO assignment_submissions (
+                    id, assignment_id, student_id, course_id, content,
+                    image_path, submitted_at, is_late
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                submission.id, submission.assignment_id, submission.student_id,
+                submission.course_id, submission.content, submission.image_path,
+                submission.submitted_at, submission.is_late
+            ], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        res.status(201).json({ submission });
+    } catch (error) {
+        console.error('Submit assignment error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get submissions for an assignment (teacher only)
+app.get('/api/assignments/:assignmentId/submissions', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { assignmentId } = req.params;
+
+        // Verify ownership
+        const assignment = await new Promise((resolve, reject) => {
+            db.get(`
+                SELECT a.*, c.created_by as course_owner
+                FROM assignments a
+                JOIN courses c ON a.course_id = c.id
+                WHERE a.id = ?
+            `, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!assignment || assignment.course_owner !== req.user.userId) {
+            return res.status(404).json({ error: 'Assignment not found or access denied' });
+        }
+
+        const submissions = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT 
+                    s.*,
+                    u.username,
+                    u.display_name
+                FROM assignment_submissions s
+                JOIN users u ON s.student_id = u.id
+                WHERE s.assignment_id = ?
+                ORDER BY s.submitted_at DESC
+            `, [assignmentId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        res.json({ submissions });
+    } catch (error) {
+        console.error('Get submissions error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update assignment (teacher only)
+app.put('/api/assignments/:assignmentId', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { assignmentId } = req.params;
+        const {
+            title,
+            description,
+            deadline_type,
+            deadline_datetime,
+            deadline_duration_hours,
+            deadline_duration_minutes,
+            auto_close,
+            image_path
+        } = req.body;
+
+        // Verify ownership
+        const assignment = await new Promise((resolve, reject) => {
+            db.get(`
+                SELECT a.*, c.created_by as course_owner
+                FROM assignments a
+                JOIN courses c ON a.course_id = c.id
+                WHERE a.id = ?
+            `, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!assignment || assignment.course_owner !== req.user.userId) {
+            return res.status(404).json({ error: 'Assignment not found or access denied' });
+        }
+
+        await new Promise((resolve, reject) => {
+            db.run(`
+                UPDATE assignments
+                SET title = ?, description = ?, deadline_type = ?,
+                    deadline_datetime = ?, deadline_duration_hours = ?,
+                    deadline_duration_minutes = ?, auto_close = ?, image_path = ?
+                WHERE id = ?
+            `, [
+                title || assignment.title,
+                description || assignment.description,
+                deadline_type || assignment.deadline_type,
+                deadline_datetime !== undefined ? deadline_datetime : assignment.deadline_datetime,
+                deadline_duration_hours !== undefined ? deadline_duration_hours : assignment.deadline_duration_hours,
+                deadline_duration_minutes !== undefined ? deadline_duration_minutes : assignment.deadline_duration_minutes,
+                auto_close !== undefined ? (auto_close ? 1 : 0) : assignment.auto_close,
+                image_path !== undefined ? image_path : assignment.image_path,
+                assignmentId
+            ], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        const updated = await new Promise((resolve, reject) => {
+            db.get(`SELECT * FROM assignments WHERE id = ?`, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        res.json({ assignment: updated });
+    } catch (error) {
+        console.error('Update assignment error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete assignment (teacher only)
+app.delete('/api/assignments/:assignmentId', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { assignmentId } = req.params;
+
+        // Verify ownership
+        const assignment = await new Promise((resolve, reject) => {
+            db.get(`
+                SELECT a.*, c.created_by as course_owner
+                FROM assignments a
+                JOIN courses c ON a.course_id = c.id
+                WHERE a.id = ?
+            `, [assignmentId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!assignment || assignment.course_owner !== req.user.userId) {
+            return res.status(404).json({ error: 'Assignment not found or access denied' });
+        }
+
+        // Delete assignment from database
+        await new Promise((resolve, reject) => {
+            db.run(`DELETE FROM assignments WHERE id = ?`, [assignmentId], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        // Delete all associated files
+        // 1. Delete assignment folder: uploads/assignments/{assignmentId}/
+        const assignmentDir = path.join(uploadsDir, 'assignments', assignmentId);
+        if (fs.existsSync(assignmentDir)) {
+            fs.rmSync(assignmentDir, { recursive: true, force: true });
+            console.log(`Deleted assignment folder: ${assignmentDir}`);
+        }
+
+        // 2. Delete files with assignmentId prefix in temp folder (if any)
+        const tempDir = path.join(uploadsDir, 'assignments', 'temp');
+        if (fs.existsSync(tempDir)) {
+            const tempFiles = fs.readdirSync(tempDir);
+            const filesToDelete = tempFiles.filter(f => f.startsWith(`${assignmentId}_`));
+            for (const file of filesToDelete) {
+                fs.unlinkSync(path.join(tempDir, file));
+                console.log(`Deleted temp file: ${file}`);
+            }
+        }
+
+        res.json({ message: 'Assignment and all associated files deleted successfully' });
+    } catch (error) {
+        console.error('Delete assignment error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ==================== END ASSIGNMENT ROUTES ====================
 
 // Static file serving
 app.get('/', (req, res) => {

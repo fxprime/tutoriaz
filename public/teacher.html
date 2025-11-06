@@ -836,6 +836,194 @@
             background-color: transparent;
             padding: 0;
         }
+
+        /* Markdown Content Styles */
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+            border: 1px solid #e5e7eb;
+        }
+
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .markdown-content th {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+
+        .markdown-content tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .markdown-content h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+
+        .markdown-content h3 {
+            font-size: 1.25em;
+        }
+
+        .markdown-content pre {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        .markdown-content code {
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+            font-size: 85%;
+        }
+
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+            font-size: 13px;
+        }
+
+        /* Assignment Styles */
+        .assignment-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .assignments-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .assignment-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+
+        .assignment-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #3b82f6;
+        }
+
+        .assignment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .assignment-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .assignment-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-open {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .badge-closed {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .assignment-meta {
+            color: #6b7280;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+
+        .assignment-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .assignment-actions button {
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .submission-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .submission-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .submission-student {
+            font-weight: bold;
+            color: #1f2937;
+        }
+
+        .submission-content {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .submission-image {
+            max-width: 100%;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
     </style>
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
@@ -857,8 +1045,8 @@
         </div>
         <div class="user-info">
             <span id="teacherName">Teacher</span>
-            <button class="profile-btn" onclick="showProfileModal()">⚙️ Profile</button>
-            <button class="logout-btn" onclick="logout()">Logout</button>
+            <button class="profile-btn" id="profileBtn">⚙️ Profile</button>
+            <button class="logout-btn" id="teacherLogoutBtn">Logout</button>
         </div>
     </div>
 
@@ -912,10 +1100,10 @@
                 <p id="teacherActiveCourseMeta" class="course-meta-line"></p>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button class="btn btn-success" onclick="showExportModal()" style="padding: 8px 16px;">📥 Export CSV</button>
-                <button class="btn btn-primary" onclick="showPushAnswersConfirm()" style="padding: 8px 16px;">📋 Show Answers to Students</button>
-                <button class="btn btn-info" onclick="showStudentScores()" style="padding: 8px 16px;">📊 View Student Scores</button>
-                <button class="back-to-lobby-btn" onclick="returnToTeacherLobby()">Back to Lobby</button>
+                <button class="btn btn-success" id="exportCsvBtn" style="padding: 8px 16px;">📥 Export CSV</button>
+                <button class="btn btn-primary" id="pushAnswersBtn" style="padding: 8px 16px;">📋 Show Answers to Students</button>
+                <button class="btn btn-info" id="studentScoresBtn" style="padding: 8px 16px;">📊 View Student Scores</button>
+                <button class="back-to-lobby-btn" id="backToTeacherLobbyBtn">Back to Lobby</button>
             </div>
         </div>
 
@@ -960,7 +1148,7 @@
                         <select id="quizCategory">
                             <option value="">No Category</option>
                         </select>
-                        <button type="button" class="btn btn-secondary" onclick="showCategoryManager()">Manage Categories</button>
+                        <button type="button" class="btn btn-secondary" id="manageCategoriesBtn">Manage Categories</button>
                     </div>
                     <div class="form-group">
                         <label for="timeoutSeconds">Timeout (seconds)</label>
@@ -980,13 +1168,24 @@
                 </form>
             </div>
 
+            <!-- Assignment Management Section -->
+            <div class="assignment-section">
+                <div class="section-header">
+                    <h3>📝 Assignments</h3>
+                    <button class="btn btn-primary" id="createAssignmentBtn">+ Create Assignment</button>
+                </div>
+                <div id="assignmentsList" class="assignments-list">
+                    <p>No assignments created yet</p>
+                </div>
+            </div>
+
             <div class="iframe-container">
                 <div id="teacherDocsContainer" class="teacher-docs-container">
                     <div class="docs-header">
                         <h3>📚 Course Documentation (LIVE)</h3>
                         <div class="docs-controls">
-                            <button class="docs-btn" onclick="toggleTeacherDocsView()">Hide Docs</button>
-                            <button class="docs-btn" onclick="openTeacherDocsNewTab()" title="Open in new tab">📋</button>
+                            <button class="docs-btn" id="toggleTeacherDocsBtn">Hide Docs</button>
+                            <button class="docs-btn" id="openTeacherDocsTabBtn" title="Open in new tab">📋</button>
                         </div>
                     </div>
                     <iframe id="teacherDocsFrame" class="teacher-docs-frame" src=""></iframe>
@@ -1001,7 +1200,7 @@
         </div>
 
         <div class="sidebar">
-            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
+            <button class="sidebar-toggle" id="sidebarToggleBtn" title="Toggle Sidebar">☰</button>
             <div class="sidebar-section">
                 <h3>Online Students (<span id="studentCount">0</span>)</h3>
                 <div class="online-students" id="onlineStudents">
@@ -1025,8 +1224,8 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="margin: 0;">Your Quizzes</h3>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-secondary" onclick="showExportQuizzesModal()" style="padding: 6px 12px; font-size: 14px;">📤 Export</button>
-                        <button class="btn btn-secondary" onclick="showImportQuizzesModal()" style="padding: 6px 12px; font-size: 14px;">📥 Import</button>
+                        <button class="btn btn-secondary" id="exportQuizzesBtn" style="padding: 6px 12px; font-size: 14px;">📤 Export</button>
+                        <button class="btn btn-secondary" id="importQuizzesBtn" style="padding: 6px 12px; font-size: 14px;">📥 Import</button>
                     </div>
                 </div>
                 <div class="quiz-list" id="quizList">
@@ -1070,13 +1269,13 @@
             </div>
             <div style="display: flex; gap: 10px; justify-content: space-between; margin-top: 15px;">
                 <div>
-                    <button class="btn btn-secondary" onclick="selectAllQuizzes(true)">Select All</button>
-                    <button class="btn btn-secondary" onclick="selectAllQuizzes(false)">Deselect All</button>
+                    <button class="btn btn-secondary" id="selectAllQuizzesBtn">Select All</button>
+                    <button class="btn btn-secondary" id="deselectAllQuizzesBtn">Deselect All</button>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-primary" onclick="exportSelectedQuizzes()">Export Selected</button>
-                    <button class="btn btn-secondary" onclick="exportAllQuizzes()">Export All</button>
-                    <button class="btn" onclick="closeExportQuizzesModal()">Cancel</button>
+                    <button class="btn btn-primary" id="exportSelectedBtn">Export Selected</button>
+                    <button class="btn btn-secondary" id="exportAllBtn">Export All</button>
+                    <button class="btn" id="cancelExportQuizzesBtn">Cancel</button>
                 </div>
             </div>
         </div>
@@ -1095,8 +1294,8 @@
                 </div>
             </div>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
-                <button class="btn btn-primary" onclick="importQuizzes()" id="importBtn" disabled>Import</button>
-                <button class="btn" onclick="closeImportQuizzesModal()">Cancel</button>
+                <button class="btn btn-primary" id="importBtn" disabled>Import</button>
+                <button class="btn" id="cancelImportBtn">Cancel</button>
             </div>
         </div>
     </div>
@@ -1109,7 +1308,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Edit Course</h2>
-                <button class="modal-close" onclick="closeEditCourseModal()">&times;</button>
+                <button class="modal-close" id="closeEditCourseBtn">&times;</button>
             </div>
             <form id="editCourseForm" class="modal-form">
                 <input type="hidden" id="editCourseId">
@@ -1137,7 +1336,7 @@
                     <small>⚠️ Changing the passkey will require students to re-enroll with the new one</small>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="cancel-btn" onclick="closeEditCourseModal()">Cancel</button>
+                    <button type="button" class="cancel-btn" id="cancelEditCourseBtn">Cancel</button>
                     <button type="submit" class="save-btn">Save Changes</button>
                 </div>
             </form>
@@ -1149,25 +1348,25 @@
         <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
                 <h2>Export Student Data</h2>
-                <button class="modal-close" onclick="closeExportModal()">&times;</button>
+                <button class="modal-close" id="closeExportCsvBtn">&times;</button>
             </div>
             <div style="padding: 20px;">
                 <p style="margin-bottom: 20px; color: #4b5563;">Choose the export format for student data:</p>
                 
                 <div style="display: grid; gap: 15px;">
-                    <button class="btn btn-primary" onclick="exportCSV('basic')" style="padding: 15px; text-align: left;">
+                    <button class="btn btn-primary" id="exportBasicBtn" style="padding: 15px; text-align: left;">
                         <strong>📊 Basic Export</strong><br>
                         <small style="color: #6b7280;">Course, teacher, name, username, enrolled date, time spent (min), score, answers, and percentile</small>
                     </button>
                     
-                    <button class="btn btn-success" onclick="exportCSV('full')" style="padding: 15px; text-align: left;">
+                    <button class="btn btn-success" id="exportFullBtn" style="padding: 15px; text-align: left;">
                         <strong>📁 Full Export</strong><br>
                         <small style="color: #6b7280;">All fields including user ID, detailed statistics, time spent (seconds), and timeout counts</small>
                     </button>
                 </div>
                 
                 <div style="margin-top: 20px;">
-                    <button type="button" class="btn" onclick="closeExportModal()" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                    <button type="button" class="btn" id="cancelExportCsvBtn" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
                 </div>
             </div>
         </div>
@@ -1178,7 +1377,7 @@
         <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
                 <h2>Edit Profile</h2>
-                <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+                <button class="modal-close" id="closeProfileBtn">&times;</button>
             </div>
             <form id="profileForm" method="post" action="#" autocomplete="off" style="padding: 20px;">
                 <div style="margin-bottom: 20px;">
@@ -1198,10 +1397,102 @@
 
                 <div style="display: grid; gap: 10px;">
                     <button type="submit" class="btn btn-primary" style="width: 100%;">💾 Save Changes</button>
-                    <button type="button" class="btn" onclick="closeProfileModal()" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                    <button type="button" class="btn" id="cancelProfileBtn" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- Create/Edit Assignment Modal -->
+    <div id="assignmentModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 id="assignmentModalTitle">Create Assignment</h2>
+                <button class="modal-close" id="closeAssignmentBtn">&times;</button>
+            </div>
+            <form id="assignmentForm" style="padding: 20px;">
+                <input type="hidden" id="assignmentId">
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Title</label>
+                    <input type="text" id="assignmentTitle" class="form-input" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Description (Markdown supported)</label>
+                    <textarea id="assignmentDescription" class="form-input" rows="6" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Deadline Type</label>
+                    <select id="deadlineType" class="form-input" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <option value="specific">Specific Date & Time</option>
+                        <option value="duration">Duration After Opening</option>
+                    </select>
+                </div>
+
+                <div id="specificDeadlineGroup" style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Deadline Date & Time</label>
+                    <input type="datetime-local" id="deadlineDatetime" class="form-input" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                </div>
+
+                <div id="durationDeadlineGroup" style="margin-bottom: 20px; display: none;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Duration After Opening</label>
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <input type="number" id="deadlineHours" class="form-input" min="0" placeholder="Hours" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <input type="number" id="deadlineMinutes" class="form-input" min="0" max="59" placeholder="Minutes" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Image Attachment (optional)</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <input type="file" id="assignmentImageFile" accept="image/*" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <div id="imagePreview" style="display: none;">
+                            <img id="previewImage" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 4px; border: 1px solid #e5e7eb;">
+                            <button type="button" id="removeImageBtn" style="margin-left: 10px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 12px;">Remove</button>
+                        </div>
+                        <div id="uploadProgress" style="display: none;">
+                            <div style="background: #e5e7eb; border-radius: 4px; overflow: hidden;">
+                                <div id="progressBar" style="background: #3b82f6; height: 8px; width: 0%; transition: width 0.3s;"></div>
+                            </div>
+                            <small id="uploadStatus" style="color: #6b7280;">Uploading...</small>
+                        </div>
+                    </div>
+                    <input type="hidden" id="assignmentImage" name="image_path">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="autoClose">
+                        <span>Auto-close assignment when deadline passes</span>
+                    </label>
+                </div>
+
+                <div style="display: grid; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">💾 Save Assignment</button>
+                    <button type="button" class="btn" id="cancelAssignmentBtn" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Submissions Modal -->
+    <div id="submissionsModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 id="submissionsModalTitle">Assignment Submissions</h2>
+                <button class="modal-close" id="closeSubmissionsBtn">&times;</button>
+            </div>
+            <div id="submissionsList" style="padding: 20px; max-height: 600px; overflow-y: auto;">
+                <p>Loading submissions...</p>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
