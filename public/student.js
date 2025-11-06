@@ -972,6 +972,14 @@
                     submitAssignmentForm.addEventListener('submit', submitAssignment);
                 }
 
+                // Add keyboard shortcut for debug panel (Ctrl+Shift+D)
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                        e.preventDefault();
+                        toggleDebugHistory();
+                    }
+                });
+
                 selectedCourseId = normalizeCourseId(localStorage.getItem('selectedCourseId'));
                 activeQueueCourseId = selectedCourseId;
                 autoOpenCourseAttempted = false;
