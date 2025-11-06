@@ -6,7 +6,7 @@
 
 const axios = require('axios');
 
-const BASE_URL = 'http://localhost:3030';
+const BASE_URL = 'http://127.0.0.1:3030';
 const colors = {
     reset: '\x1b[0m',
     green: '\x1b[32m',
@@ -44,6 +44,9 @@ async function testRegistration(testName, data, shouldFail = false) {
 
 async function runTests() {
     log('blue', '\n=== Security Registration Tests ===\n');
+    
+    // Generate unique suffix for this test run
+    const timestamp = Date.now().toString().slice(-6);
     
     const tests = [
         // Username validation tests
@@ -98,34 +101,34 @@ async function runTests() {
         // XSS attempt tests
         {
             name: 'Sanitize XSS in display name',
-            data: { username: 'testxss1', password: 'Test123!', display_name: '<script>alert("xss")</script>' },
+            data: { username: `testxss1_${timestamp}`, password: 'Test123!', display_name: '<script>alert("xss")</script>' },
             shouldFail: false // Should succeed but sanitize
         },
         {
             name: 'Sanitize HTML tags in display name',
-            data: { username: 'testxss2', password: 'Test123!', display_name: '<b>Bold Name</b>' },
+            data: { username: `testxss2_${timestamp}`, password: 'Test123!', display_name: '<b>Bold Name</b>' },
             shouldFail: false // Should succeed but sanitize
         },
         
         // Valid registration tests
         {
             name: 'Accept valid username and password (letters + numbers)',
-            data: { username: 'validuser1', password: 'Valid123', display_name: 'Valid User' },
+            data: { username: `validuser1_${timestamp}`, password: 'Valid123', display_name: 'Valid User' },
             shouldFail: false
         },
         {
             name: 'Accept valid username and password (letters + symbols)',
-            data: { username: 'validuser2', password: 'Valid@Pass', display_name: 'Another User' },
+            data: { username: `validuser2_${timestamp}`, password: 'Valid@Pass', display_name: 'Another User' },
             shouldFail: false
         },
         {
             name: 'Accept username with underscores (not at start)',
-            data: { username: 'valid_user_3', password: 'Test123!', display_name: 'Test' },
+            data: { username: `valid_user_3_${timestamp}`, password: 'Test123!', display_name: 'Test' },
             shouldFail: false
         },
         {
             name: 'Accept empty display name (uses username)',
-            data: { username: 'validuser4', password: 'Test123!', display_name: '' },
+            data: { username: `validuser4_${timestamp}`, password: 'Test123!', display_name: '' },
             shouldFail: false
         }
     ];
@@ -140,7 +143,7 @@ async function runTests() {
         } else {
             failed++;
         }
-        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between tests
+        await new Promise(resolve => setTimeout(resolve, 200)); // Delay to avoid rate limiting
     }
     
     log('blue', `\n=== Test Summary ===`);

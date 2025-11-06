@@ -237,7 +237,8 @@ app.use(express.urlencoded({ extended: false, limit: '8kb' }));
 app.use(express.static('public'));
 
 // Rate limiter for auth endpoints (login / register)
-const authLimiter = rateLimit({
+// Disable in test mode for automated testing
+const authLimiter = process.env.NODE_ENV === 'test' ? (req, res, next) => next() : rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 15, // limit each IP to 15 requests per windowMs
     standardHeaders: true,
