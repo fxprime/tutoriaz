@@ -1220,29 +1220,23 @@
                 </div>
             </div>
 
-            <div class="content-container">
-                <div class="course-content">
-                    <div id="courseDocsContainer" class="course-docs-container">
-                        <div class="docs-header">
-                            <h3>📚 Course Documentation (LIVE)</h3>
-                            <div class="docs-controls">
-                                <button class="docs-btn" id="toggleDocsBtn">Hide Docs</button>
-                                <button class="docs-btn" id="openDocsTabBtn" title="Open in new tab">📋</button>
-                            </div>
-                        </div>
-                        <iframe id="courseDocsFrame" class="course-docs-frame" src=""></iframe>
+            <!-- Course Documentation - Full Width Container -->
+            <div id="courseDocsContainer" class="course-docs-container">
+                <div class="docs-header">
+                    <h3>📚 Course Documentation (LIVE)</h3>
+                    <div class="docs-controls">
+                        <button class="docs-btn" id="toggleDocsBtn">Hide Docs</button>
+                        <button class="docs-btn" id="openDocsTabBtn" title="Open in new tab">📋</button>
                     </div>
-
-                    <!-- Assignments Section -->
-                    <div id="assignmentsSection" class="assignments-section hidden">
-                        <h3>📝 Assignments</h3>
-                        <div id="studentAssignmentsList" class="assignments-list">
-                            <!-- Assignments will be loaded here -->
-                        </div>
-                    </div>
-                    
-                    <!-- Default course content removed - will be replaced with iframe documentation -->
                 </div>
+                <iframe id="courseDocsFrame" class="course-docs-frame" src=""></iframe>
+            </div>
+
+            <!-- Assignments Section -->
+            <div id="assignmentsSection" class="assignments-section hidden">
+                <h3>📝 Assignments</h3>
+                <div id="studentAssignmentsList" class="assignments-list">
+                    <!-- Assignments will be loaded here -->
                 </div>
             </div>
         </div>
