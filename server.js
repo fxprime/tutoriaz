@@ -301,7 +301,7 @@ async function compressImage(buffer, filename) {
                 quality: 80,
                 effort: 4  // Compression effort (0-6), 4 is good balance
             })
-            .toBuffer();
+            .toBuffer(); 
         
         // Return buffer and new filename with .webp extension
         const nameWithoutExt = path.basename(filename, path.extname(filename));
