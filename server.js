@@ -2235,7 +2235,7 @@ app.post('/api/courses/:courseId/attend', authenticateToken, async (req, res) =>
         const activeTabId = session.active_tab_id || tabId || null;
         syncConnectedUserAttendance(studentId, courseId, session.status, activeTabId);
         emitAttendanceUpdate(studentId, { session });
-        updateOnlineList();
+        updateOnlineListDebounced();
 
         res.json({ session });
     } catch (error) {
@@ -2285,7 +2285,7 @@ app.post('/api/courses/:courseId/unattend', authenticateToken, async (req, res) 
 
         syncConnectedUserAttendance(studentId, null, null, tabId || null);
         emitAttendanceUpdate(studentId, { session: endedSession });
-        updateOnlineList();
+        updateOnlineListDebounced();
 
         res.json({ session: endedSession });
     } catch (error) {
@@ -3706,7 +3706,7 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
 
         const snapshot = await getQueueSnapshot(req.user.userId);
         syncStudentQueueCache(req.user.userId, snapshot);
-        updateOnlineList();
+        updateOnlineListDebounced();
 
         res.json({ 
             message: 'Cleanup completed',
@@ -3926,8 +3926,8 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
             });
         });
 
-        // Update online list to show new queue status
-        updateOnlineList();
+        // Note: updateOnlineList is debounced and will be triggered by socket events from students
+        // No need to call it immediately here during mass push to avoid cascade
 
         res.json({ 
             push,
@@ -4397,8 +4397,8 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
 
         activePushes.delete(pushId);
 
-        // Update online list to reflect queue changes
-        updateOnlineList();
+        // Update online list to reflect queue changes (debounced)
+        updateOnlineListDebounced();
 
         res.json({ message: 'Push undone successfully' });
     } catch (error) {
@@ -4504,7 +4504,7 @@ async function handlePushTimeout(pushId) {
     if (!Array.isArray(viewingRows) || viewingRows.length === 0) {
         const completedNoRows = await finalizePushIfComplete(pushId, push);
         if (completedNoRows) {
-            updateOnlineList();
+            updateOnlineListDebounced();
         }
         return;
     }
@@ -4699,7 +4699,7 @@ async function handlePushTimeout(pushId) {
         await schedulePushTimeoutCheck(pushId);
     }
 
-    updateOnlineList();
+    updateOnlineListDebounced();
 }
 
 async function schedulePushTimeoutCheck(pushId) {
@@ -4864,7 +4864,7 @@ io.on('connection', (socket) => {
                 }
             }
 
-            updateOnlineList();
+            updateOnlineListDebounced();
         } catch (error) {
             console.error('Auth error:', error);
             socket.emit('auth_error', { message: 'Authentication failed' });
@@ -4894,7 +4894,7 @@ io.on('connection', (socket) => {
             info.isPrimaryTab = visible;
         }
 
-        updateOnlineList();
+        updateOnlineListDebounced();
     });
 
     socket.on('get_my_queue', async () => {
@@ -5050,7 +5050,7 @@ io.on('connection', (socket) => {
                 });
             }
 
-            updateOnlineList();
+            updateOnlineListDebounced();
         } catch (error) {
             console.error('student_active_course error:', error);
             socket.emit('course_activation_error', {
@@ -5168,8 +5168,8 @@ io.on('connection', (socket) => {
                             });
                         }
 
-                        // Update online list to reflect queue changes
-                        updateOnlineList();
+                        // Update online list to reflect queue changes (debounced to prevent cascade)
+                        updateOnlineListDebounced();
 
                         // Notify teachers with correctness information
                         const teachers = Array.from(connectedUsers.values())
@@ -5247,16 +5247,40 @@ io.on('connection', (socket) => {
         }
 
         connectedUsers.delete(socket.id);
-        updateOnlineList();
+        updateOnlineListDebounced();
     });
 });
 
+// Debounce updateOnlineList to prevent cascade during mass operations
+let updateOnlineListTimeout = null;
+let isUpdateOnlineListRunning = false;
+
+const updateOnlineListDebounced = () => {
+    if (updateOnlineListTimeout) {
+        clearTimeout(updateOnlineListTimeout);
+    }
+    updateOnlineListTimeout = setTimeout(() => {
+        if (!isUpdateOnlineListRunning) {
+            updateOnlineList();
+        }
+    }, 500); // Wait 500ms after last call
+};
+
 // Update online users list for teachers
 const updateOnlineList = () => {
+    // Prevent concurrent executions
+    if (isUpdateOnlineListRunning) {
+        console.log('[updateOnlineList] Skipping - already running');
+        return;
+    }
+    
+    isUpdateOnlineListRunning = true;
+    
     const teachers = Array.from(connectedUsers.values())
         .filter(user => user.role === 'teacher');
 
     if (teachers.length === 0) {
+        isUpdateOnlineListRunning = false;
         return;
     }
 
@@ -5394,8 +5418,11 @@ const updateOnlineList = () => {
         teachers.forEach(teacher => {
             io.to(teacher.socketId).emit('online_students', { students: studentsForTeachers });
         });
+        
+        isUpdateOnlineListRunning = false;
     }).catch(err => {
         console.error('updateOnlineList error:', err);
+        isUpdateOnlineListRunning = false;
     });
 };
 
