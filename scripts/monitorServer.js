@@ -7,7 +7,7 @@
 
 const fetch = require('node-fetch');
 
-const SERVER_URL = process.argv[2] || 'http://localhost:3030';
+const SERVER_URL = process.argv[2] || 'http://127.0.0.1:3030';  // Use IPv4
 const MONITOR_INTERVAL = 2000; // Check every 2 seconds
 
 let previousStats = null;

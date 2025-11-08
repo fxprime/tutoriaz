@@ -4,7 +4,7 @@
 # Usage: ./scripts/quick-load-test.sh [num_students]
 
 NUM_STUDENTS=${1:-40}
-SERVER_URL=${2:-http://localhost:3030}
+SERVER_URL=${2:-http://127.0.0.1:3030}  # Use IPv4 instead of localhost
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  🧪 Tutoriaz Quick Load Test"

@@ -11,9 +11,9 @@ const io = require('socket.io-client');
 const fetch = require('node-fetch');
 
 const NUM_STUDENTS = parseInt(process.argv[2]) || 40;
-const SERVER_URL = process.argv[3] || 'http://localhost:3030';
-const TEACHER_USERNAME = 'teacher1';
-const TEACHER_PASSWORD = 'password123';
+const SERVER_URL = process.argv[3] || 'http://127.0.0.1:3030';  // Use IPv4 instead of localhost
+const TEACHER_USERNAME = 'teacher';
+const TEACHER_PASSWORD = 'admin123';
 
 let teacherToken = null;
 let studentTokens = [];
@@ -30,43 +30,73 @@ async function createTestStudents() {
     console.log('📝 Creating test students...');
     const timestamp = Date.now();
     
-    for (let i = 1; i <= NUM_STUDENTS; i++) {
-        const username = `loadtest_${timestamp}_${i}`;
-        const password = 'test123';
+    // Process in batches to avoid overwhelming the server
+    const batchSize = 5;
+    for (let batchStart = 1; batchStart <= NUM_STUDENTS; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize - 1, NUM_STUDENTS);
+        const batchPromises = [];
         
-        try {
-            const response = await fetch(`${SERVER_URL}/api/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username,
-                    password,
-                    display_name: `Test Student ${i}`,
-                    role: 'student'
-                })
-            });
+        for (let i = batchStart; i <= batchEnd; i++) {
+            const username = `loadtest_${timestamp}_${i}`;
+            const password = 'test12345';  // Must be at least 8 characters
             
-            const data = await response.json();
-            
-            if (response.ok) {
-                studentTokens.push({ username, token: data.token, userId: data.user.userId });
-                if (i % 10 === 0) {
-                    console.log(`   ✓ Created ${i}/${NUM_STUDENTS} students`);
-                }
-            } else if (response.status === 409) {
-                // Student exists, try to login
-                const loginResponse = await fetch(`${SERVER_URL}/api/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const loginData = await loginResponse.json();
-                if (loginResponse.ok) {
-                    studentTokens.push({ username, token: loginData.token, userId: loginData.user.userId });
-                }
+            batchPromises.push(
+                (async () => {
+                    try {
+                        const response = await fetch(`${SERVER_URL}/api/register`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username,
+                                password,
+                                display_name: `Test Student ${i}`,
+                                role: 'student'
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            return { username, token: data.token, userId: data.user.userId };
+                        } else if (response.status === 409) {
+                            // Student exists, try to login
+                            const loginResponse = await fetch(`${SERVER_URL}/api/login`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username, password })
+                            });
+                            const loginData = await loginResponse.json();
+                            if (loginResponse.ok) {
+                                return { username, token: loginData.token, userId: loginData.user.userId };
+                            } else {
+                                console.error(`   ✗ Login failed for ${username}:`, loginData.error);
+                                return null;
+                            }
+                        } else {
+                            console.error(`   ✗ Register failed for ${username}:`, data.error);
+                            return null;
+                        }
+                    } catch (error) {
+                        console.error(`   ✗ Failed to create ${username}:`, error.message);
+                        return null;
+                    }
+                })()
+            );
+        }
+        
+        // Wait for batch to complete
+        const results = await Promise.all(batchPromises);
+        results.forEach(result => {
+            if (result) {
+                studentTokens.push(result);
             }
-        } catch (error) {
-            console.error(`   ✗ Failed to create ${username}:`, error.message);
+        });
+        
+        console.log(`   ✓ Created ${studentTokens.length}/${NUM_STUDENTS} students`);
+        
+        // Small delay between batches to avoid rate limiting
+        if (batchEnd < NUM_STUDENTS) {
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
     }
     
@@ -113,11 +143,18 @@ async function setupCourse() {
             headers: { 'Authorization': `Bearer ${teacherToken}` }
         });
         
-        const courses = await response.json();
+        if (!response.ok) {
+            console.error('   ✗ Failed to fetch courses:', response.status, response.statusText);
+            return;
+        }
         
-        if (courses.length > 0) {
+        const courses = await response.json();
+        console.log(`   📋 Found ${courses ? courses.length : 0} courses`);
+        
+        if (courses && courses.length > 0) {
             courseId = courses[0].id;
-            console.log(`   ✅ Using existing course: ${courses[0].name} (${courseId})\n`);
+            const courseName = courses[0].title || courses[0].name || 'Unknown Course';
+            console.log(`   ✅ Using existing course: ${courseName} (${courseId})\n`);
         } else {
             // Create a new course
             const createResponse = await fetch(`${SERVER_URL}/api/courses`, {
@@ -127,14 +164,33 @@ async function setupCourse() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    name: 'Load Test Course',
-                    description: 'Automated load testing'
+                    title: 'Load Test Course',
+                    description: 'Automated load testing',
+                    passkey: 'loadtest123'  // Required passkey for course enrollment
                 })
             });
             
+            if (!createResponse.ok) {
+                const errorData = await createResponse.json();
+                console.error('   ✗ Failed to create course:', errorData);
+                return;
+            }
+            
             const newCourse = await createResponse.json();
-            courseId = newCourse.id;
+            // Try multiple possible response structures
+            courseId = newCourse.course?.id || newCourse.id || newCourse.courseId;
+            
+            if (!courseId) {
+                console.error('   ✗ Course created but ID is undefined. Response:', JSON.stringify(newCourse));
+                return;
+            }
+            
             console.log(`   ✅ Created new course: ${courseId}\n`);
+        }
+        
+        if (!courseId) {
+            console.error('   ✗ No course ID available');
+            return;
         }
         
         // Enroll all students
@@ -295,6 +351,7 @@ async function getFirstQuiz() {
         const quizzes = await response.json();
         
         if (quizzes.length > 0) {
+            console.log(`   ✅ Found ${quizzes.length} quizzes\n`);
             return quizzes[0].id;
         } else {
             console.log('   ⚠️  No quizzes found. Creating test quiz...');
@@ -327,9 +384,22 @@ async function createTestQuiz() {
             })
         });
         
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('   ✗ Failed to create quiz:', errorData);
+            return null;
+        }
+        
         const quiz = await response.json();
-        console.log(`   ✅ Created test quiz: ${quiz.id}\n`);
-        return quiz.id;
+        const quizId = quiz.quiz?.id || quiz.id;
+        
+        if (!quizId) {
+            console.error('   ✗ Quiz created but ID is undefined. Response:', JSON.stringify(quiz));
+            return null;
+        }
+        
+        console.log(`   ✅ Created test quiz: ${quizId}\n`);
+        return quizId;
     } catch (error) {
         console.error('   ✗ Failed to create quiz:', error.message);
         return null;
@@ -368,6 +438,12 @@ async function runLoadTest() {
         
         // Step 3: Setup course
         await setupCourse();
+        
+        if (!courseId) {
+            console.error('❌ No course ID available. Cannot proceed.\n');
+            cleanup();
+            process.exit(1);
+        }
         
         // Step 4: Connect students
         await connectStudents();
