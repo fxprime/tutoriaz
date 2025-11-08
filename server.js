@@ -3752,6 +3752,9 @@ app.get('/api/queue-status', authenticateToken, async (req, res) => {
 
 // Push quiz to students (teacher only)
 app.post('/api/pushes', authenticateToken, async (req, res) => {
+    // Extend timeout for large classes (default is 120s, set to 5 minutes)
+    req.setTimeout(300000);
+    
     try {
         if (req.user.role !== 'teacher') {
             return res.status(403).json({ error: 'Teacher access required' });
@@ -3829,47 +3832,63 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
         let addedCount = 0;
         let skippedCount = 0;
 
-        // Add to each student's queue (check if quiz already in their queue or already answered)
-        for (const student of targetStudents) {
-            try {
-                // Check if this quiz is already in student's queue
-                const alreadyInQueue = await checkQuizInStudentQueue(student.userId, quiz_id, effectiveCourseId);
-                
-                if (alreadyInQueue) {
-                    console.log(`Quiz "${quiz.title}" already in queue for ${student.username}`);
-                    skippedCount++;
-                    continue;
-                }
+        // Process all students in parallel batches for better performance
+        const batchSize = 20; // Process 20 students at a time
+        const studentBatches = [];
+        for (let i = 0; i < targetStudents.length; i += batchSize) {
+            studentBatches.push(targetStudents.slice(i, i + batchSize));
+        }
 
-                // Check if student already answered this quiz
-                const alreadyAnswered = await checkQuizAlreadyAnswered(student.userId, quiz_id);
-                
-                if (alreadyAnswered) {
-                    console.log(`Quiz "${quiz.title}" already answered by ${student.username}`);
-                    skippedCount++;
-                    continue;
-                }
+        for (const batch of studentBatches) {
+            const results = await Promise.all(
+                batch.map(async (student) => {
+                    try {
+                        // Check if this quiz is already in student's queue
+                        const alreadyInQueue = await checkQuizInStudentQueue(student.userId, quiz_id, effectiveCourseId);
+                        
+                        if (alreadyInQueue) {
+                            console.log(`Quiz "${quiz.title}" already in queue for ${student.username}`);
+                            return { status: 'skipped', student };
+                        }
 
-                // Add to student's queue
-                const result = await addToStudentQueue(student.userId, push.id, quiz_id, quiz);
-                if (result.added) {
-                    addedCount++;
+                        // Check if student already answered this quiz
+                        const alreadyAnswered = await checkQuizAlreadyAnswered(student.userId, quiz_id);
+                        
+                        if (alreadyAnswered) {
+                            console.log(`Quiz "${quiz.title}" already answered by ${student.username}`);
+                            return { status: 'skipped', student };
+                        }
 
-                    const snapshot = await getQueueSnapshot(student.userId, effectiveCourseId);
-                    syncStudentQueueCache(student.userId, snapshot);
+                        // Add to student's queue
+                        const result = await addToStudentQueue(student.userId, push.id, quiz_id, quiz);
+                        if (result.added) {
+                            const snapshot = await getQueueSnapshot(student.userId, effectiveCourseId);
+                            syncStudentQueueCache(student.userId, snapshot);
 
-                    io.to(student.socketId).emit('quiz_queue_updated', buildQueueUpdatePayload(snapshot));
+                            io.to(student.socketId).emit('quiz_queue_updated', buildQueueUpdatePayload(snapshot));
 
-                    if (snapshot.currentQuiz && snapshot.currentQuiz.push_id === push.id) {
-                        io.to(student.socketId).emit('show_next_quiz', buildShowQuizPayload(snapshot.currentQuiz));
+                            if (snapshot.currentQuiz && snapshot.currentQuiz.push_id === push.id) {
+                                io.to(student.socketId).emit('show_next_quiz', buildShowQuizPayload(snapshot.currentQuiz));
+                            }
+                            return { status: 'added', student };
+                        } else {
+                            return { status: 'skipped', student };
+                        }
+                    } catch (err) {
+                        console.error(`Error adding to queue for ${student.username}:`, err);
+                        return { status: 'error', student, error: err };
                     }
-                } else if (result.skipped) {
+                })
+            );
+
+            // Tally results from this batch
+            results.forEach(result => {
+                if (result.status === 'added') {
+                    addedCount++;
+                } else if (result.status === 'skipped' || result.status === 'error') {
                     skippedCount++;
                 }
-            } catch (err) {
-                console.error(`Error adding to queue for ${student.username}:`, err);
-                skippedCount++;
-            }
+            });
         }
 
         // Store active push metadata for both push and quiz indexes
