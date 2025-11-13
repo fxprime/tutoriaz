@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Quiz Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1a202c;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-size: 16px;
+            font-weight: 600;
+            color: #718096;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #4a5568;
+            background: #f7fafc;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #cbd5e0;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #48bb78;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+
+        .stat-item {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .stat-quizzes {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .stat-students {
+            background: #d9f99d;
+            color: #365314;
+        }
+
+        .stat-pending {
+            background: #fef3c7;
+            color: #78350f;
+        }
+
+        .stat-answered {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .quiz-card {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            transition: all 0.3s;
+        }
+
+        .quiz-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .quiz-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+            gap: 8px;
+        }
+
+        .quiz-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #1a202c;
+            flex: 1;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .quiz-info-icon {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .quiz-info-icon:hover {
+            background: #5568d3;
+            transform: scale(1.1);
+        }
+
+        .quiz-badge {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .badge-active {
+            background: #48bb78;
+            color: white;
+        }
+
+        .quiz-meta {
+            font-size: 11px;
+            color: #718096;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .quiz-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .student-list {
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .student-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #cbd5e0;
+            font-size: 12px;
+            gap: 8px;
+        }
+
+        .student-item.viewing {
+            border-left-color: #4299e1;
+            background: #ebf8ff;
+        }
+
+        .student-item.answered {
+            border-left-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .student-item.answered.correct {
+            border-left-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .student-item.answered.incorrect {
+            border-left-color: #f56565;
+            background: #fff5f5;
+        }
+
+        .student-name {
+            font-weight: 600;
+            color: #2d3748;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .student-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .badge-pending {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .badge-viewing {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .badge-answered {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .correctness-indicator {
+            font-size: 14px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .correctness-indicator.revealed {
+            opacity: 1;
+        }
+
+        .correctness-indicator.correct {
+            color: #48bb78;
+        }
+
+        .correctness-indicator.incorrect {
+            color: #f56565;
+        }
+
+        .time-indicator {
+            font-size: 10px;
+            color: #718096;
+        }
+
+        .no-quizzes {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a0aec0;
+            font-size: 18px;
+        }
+
+        .waiting-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+            animation: pulse 1.5s ease-in-out infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #2d3748;
+            color: white;
+            padding: 8px 20px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+        }
+
+        .status-dot.disconnected {
+            background: #f56565;
+        }
+
+        body {
+            padding-top: 48px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #a0aec0;
+        }
+
+        /* Scrollbar styling */
+        .student-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .student-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .student-list::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 10px;
+        }
+
+        .student-list::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+
+        /* Quiz info tooltip */
+        .quiz-info-tooltip {
+            position: fixed;
+            background: #2d3748;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            max-width: 250px;
+            z-index: 2000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .quiz-info-tooltip.show {
+            opacity: 1;
+        }
+
+        .quiz-info-tooltip-item {
+            margin-bottom: 6px;
+        }
+
+        .quiz-info-tooltip-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .quiz-info-tooltip-label {
+            font-weight: 600;
+            color: #a0aec0;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .rankings-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .rankings-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .rankings-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .rankings-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+
+        .rankings-table tr:hover {
+            background: #f7fafc;
+        }
+
+        .rank-badge {
+            display: inline-block;
+            min-width: 30px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .course-selector {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .course-selector label {
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 60px;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <div class="status-bar">
+        <div class="connection-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Connected</span>
+        </div>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <div class="toggle-label">
+                <span>Show Correctness</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="correctnessToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <span id="lastUpdate">Last update: --</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="title">📊 Multi-Quiz Monitor</div>
+            <div class="controls">
+                <button class="btn btn-primary" id="refreshBtn">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="quizzes">📝 Active Quizzes</button>
+            <button class="tab" data-tab="rankings">🏆 Rankings</button>
+        </div>
+
+        <!-- Quizzes Tab -->
+        <div class="tab-content active" id="quizzesTab">
+            <div class="stats-bar">
+                <div class="stat-item stat-quizzes">
+                    Active Quizzes: <span id="activeQuizzesCount">0</span>
+                </div>
+                <div class="stat-item stat-students">
+                    Students: <span id="totalStudentsCount">0</span>
+                </div>
+                <div class="stat-item stat-pending">
+                    Pending: <span id="totalPendingCount">0</span>
+                </div>
+                <div class="stat-item stat-answered">
+                    Answered: <span id="totalAnsweredCount">0</span>
+                </div>
+            </div>
+
+            <div class="monitor-grid" id="monitorGrid">
+                <div class="no-quizzes">
+                    Waiting for quiz pushes<span class="waiting-indicator"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rankings Tab -->
+        <div class="tab-content" id="rankingsTab">
+            <div class="course-selector">
+                <label>Course:</label>
+                <div id="courseDisplay" style="flex: 1; font-size: 14px; color: #2d3748;">
+                    Select a course from the teacher dashboard
+                </div>
+            </div>
+
+            <div id="rankingsContainer">
+                <div class="loading-state">
+                    Click the Rankings tab to load course rankings
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/quiz-multi-monitor.js"></script>
+</body>
+</html>

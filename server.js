@@ -4096,6 +4096,131 @@ app.get('/api/pushes/:pushId/responses', authenticateToken, async (req, res) => 
     }
 });
 
+// Get all active quizzes with student progress for multi-quiz monitor (teacher only)
+app.get('/api/monitor/all-active-quizzes', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        // Get all active pushes from student_quiz_queue
+        const activePushesQuery = `
+            SELECT DISTINCT 
+                sqq.push_id,
+                qp.quiz_id,
+                qp.pushed_at,
+                qp.pushed_by,
+                qp.timeout_seconds,
+                qp.course_id,
+                q.title as quiz_title,
+                q.correct_answer,
+                q.question_type,
+                q.is_scored
+            FROM student_quiz_queue sqq
+            JOIN quiz_pushes qp ON sqq.push_id = qp.id
+            JOIN quizzes q ON sqq.quiz_id = q.id
+            WHERE sqq.status IN ('pending', 'viewing', 'answered')
+                AND (qp.undone_at IS NULL OR qp.undone_at = '')
+            GROUP BY sqq.push_id
+            ORDER BY qp.pushed_at DESC
+        `;
+
+        const pushes = await new Promise((resolve, reject) => {
+            db.all(activePushesQuery, [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        // For each push, get student data
+        const quizzesWithStudents = await Promise.all(pushes.map(async (push) => {
+            // Get all students in queue for this push
+            const studentsQuery = `
+                SELECT 
+                    sqq.user_id,
+                    sqq.status as queue_status,
+                    sqq.first_viewed_at,
+                    u.username,
+                    u.display_name,
+                    qr.elapsed_ms,
+                    qr.answered_at,
+                    qr.answer_text,
+                    qr.status as response_status
+                FROM student_quiz_queue sqq
+                JOIN users u ON sqq.user_id = u.id
+                LEFT JOIN quiz_responses qr ON qr.push_id = sqq.push_id AND qr.user_id = sqq.user_id
+                WHERE sqq.push_id = ?
+                ORDER BY u.display_name
+            `;
+
+            const students = await new Promise((resolve, reject) => {
+                db.all(studentsQuery, [push.push_id], (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                });
+            });
+
+            // Calculate correctness for answered students
+            const studentsWithCorrectness = students.map(student => {
+                let isCorrect = null;
+                let status = student.queue_status || 'pending';
+
+                // If student has answered, calculate correctness
+                if (student.response_status === 'answered' && push.correct_answer && student.answer_text) {
+                    const answerValue = parseStoredAnswer(student.answer_text);
+                    const correctValue = parseStoredAnswer(push.correct_answer);
+                    
+                    if (push.question_type === 'select' && answerValue && typeof answerValue === 'object') {
+                        const selectedText = answerValue.selected_text || '';
+                        const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
+                        const extractedAnswer = match ? match[1].trim() : selectedText.trim();
+                        isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
+                    } else if (push.question_type === 'checkbox' && Array.isArray(answerValue) && Array.isArray(correctValue)) {
+                        // For checkbox, compare arrays
+                        const answerSet = new Set(answerValue.map(v => String(v).toLowerCase().trim()));
+                        const correctSet = new Set(correctValue.map(v => String(v).toLowerCase().trim()));
+                        isCorrect = answerSet.size === correctSet.size && 
+                                   [...answerSet].every(v => correctSet.has(v));
+                    } else {
+                        const answerDisplay = formatAnswerForDisplay(answerValue);
+                        const correctDisplay = formatAnswerForDisplay(correctValue);
+                        isCorrect = answerDisplay.toLowerCase().trim() === correctDisplay.toLowerCase().trim();
+                    }
+                    
+                    status = 'answered';
+                }
+
+                return {
+                    user_id: student.user_id,
+                    display_name: student.display_name || student.username,
+                    status: status,
+                    elapsed_ms: student.elapsed_ms,
+                    answered_at: student.answered_at,
+                    is_correct: isCorrect
+                };
+            });
+
+            return {
+                push_id: push.push_id,
+                quiz_id: push.quiz_id,
+                quiz_title: push.quiz_title,
+                pushed_at: push.pushed_at,
+                timeout_seconds: push.timeout_seconds,
+                course_id: push.course_id,
+                students: studentsWithCorrectness
+            };
+        }));
+
+        res.json({
+            quizzes: quizzesWithStudents,
+            count: quizzesWithStudents.length
+        });
+    } catch (error) {
+        console.error('Get all active quizzes error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 async function resolveActivePush(identifier) {
     const normalized = identifier ? String(identifier).trim() : '';
     if (!normalized) {

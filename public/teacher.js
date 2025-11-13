@@ -48,7 +48,6 @@
         let lastGeneratedPasskey = '';
         let activeStudentDetailId = null;
         let baseUrl = window.location.origin; // Default fallback
-        let quizMonitorWindow = null; // Track the quiz monitor window for reuse
 
         // Fetch app configuration
         async function fetchAppConfig() {
@@ -1109,6 +1108,9 @@
                 const studentScoresBtn = document.getElementById('studentScoresBtn');
                 if (studentScoresBtn) studentScoresBtn.addEventListener('click', showStudentScores);
 
+                const multiQuizMonitorBtn = document.getElementById('multiQuizMonitorBtn');
+                if (multiQuizMonitorBtn) multiQuizMonitorBtn.addEventListener('click', openMultiQuizMonitor);
+
                 const backToTeacherLobbyBtn = document.getElementById('backToTeacherLobbyBtn');
                 if (backToTeacherLobbyBtn) backToTeacherLobbyBtn.addEventListener('click', returnToTeacherLobby);
 
@@ -1609,8 +1611,7 @@
                     activeResponses.set(data.push.id, []);
                     updateQueueStatus();
 
-                    // Open quiz monitor popup
-                    openQuizMonitor(data.push.id, quizId);
+                    // Note: Use the Multi-Quiz Monitor button to view all active quizzes
                 } else {
                     showNotification(data.error, 'error');
                 }
@@ -2983,33 +2984,31 @@
             });
         }
 
-        // Open quiz monitor popup window
-        function openQuizMonitor(pushId, quizId) {
-            const width = 850;
-            const height = 700;
+        // Open multi-quiz monitor window (shows all active quizzes)
+        function openMultiQuizMonitor() {
+            if (!selectedCourseId) {
+                showNotification('Please select a course first', 'error');
+                return;
+            }
+
+            const width = 1400;
+            const height = 900;
             const left = (screen.width - width) / 2;
             const top = (screen.height - height) / 2;
             
-            const monitorUrl = `/quiz-monitor.html?pushId=${encodeURIComponent(pushId)}&quizId=${encodeURIComponent(quizId)}&token=${encodeURIComponent(token)}`;
+            const monitorUrl = `/quiz-multi-monitor.html?token=${encodeURIComponent(token)}&courseId=${encodeURIComponent(selectedCourseId)}`;
             
-            // Check if monitor window exists and is still open
-            if (quizMonitorWindow && !quizMonitorWindow.closed) {
-                // Update the existing window with new quiz data
-                quizMonitorWindow.location.href = monitorUrl;
-                quizMonitorWindow.focus();
-            } else {
-                // Open a new monitor window with a consistent name
-                quizMonitorWindow = window.open(
-                    monitorUrl,
-                    'QuizMonitor', // Use consistent name to reuse window
-                    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
-                );
+            // Open a new monitor window
+            const multiMonitorWindow = window.open(
+                monitorUrl,
+                'MultiQuizMonitor', // Use consistent name to reuse window
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+            );
 
-                if (quizMonitorWindow) {
-                    quizMonitorWindow.focus();
-                } else {
-                    showNotification('Please allow popups to view the quiz monitor', 'error');
-                }
+            if (multiMonitorWindow) {
+                multiMonitorWindow.focus();
+            } else {
+                showNotification('Please allow popups to view the multi-quiz monitor', 'error');
             }
         }
 
