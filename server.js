@@ -5618,8 +5618,13 @@ const updateOnlineList = () => {
             let attendanceDurationSeconds = null;
             if (activeSession && activeSession.started_at) {
                 const startedAtMs = Date.parse(activeSession.started_at);
-                if (Number.isFinite(startedAtMs)) {
-                    attendanceDurationSeconds = Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+                // Validate that the timestamp is reasonable (not in the future, not too old)
+                const now = Date.now();
+                const oneYearAgo = now - (365 * 24 * 60 * 60 * 1000);
+                if (Number.isFinite(startedAtMs) && startedAtMs <= now && startedAtMs >= oneYearAgo) {
+                    attendanceDurationSeconds = Math.max(0, Math.floor((now - startedAtMs) / 1000));
+                } else {
+                    console.warn(`Invalid attendance started_at for student ${student.userId}: ${activeSession.started_at} (parsed: ${startedAtMs})`);
                 }
             }
 
