@@ -8,6 +8,7 @@ let studentData = {}; // Map of pushId -> Map of userId -> student data
 let isCorrectnessRevealed = false;
 let currentCourse = null; // Current course data
 let currentTab = 'quizzes'; // Current active tab
+let sortBy = 'name'; // 'name' or 'response'
 
 // Connect to socket
 function connectSocket() {
@@ -184,12 +185,12 @@ function updateLastUpdateTime() {
 }
 
 function renderMonitor() {
-    const grid = document.getElementById('monitorGrid');
+    const monitorGrid = document.getElementById('monitorGrid');
     const quizzes = Object.values(quizData);
     
     if (quizzes.length === 0) {
-        grid.innerHTML = `
-            <div class="no-quizzes">
+        monitorGrid.innerHTML = `
+            <div style="text-align: center; padding: 60px; color: #a0aec0; width: 100%;">
                 Waiting for quiz pushes<span class="waiting-indicator"></span>
             </div>
         `;
@@ -208,28 +209,36 @@ function renderMonitor() {
     let totalPending = 0;
     let totalAnswered = 0;
     
-    grid.innerHTML = quizzes.map(quiz => {
+    // Build columns - each quiz is a column
+    monitorGrid.innerHTML = quizzes.map(quiz => {
         const students = Object.values(studentData[quiz.push_id] || {});
         
-        // Sort students: viewing first, then pending, then answered
-        students.sort((a, b) => {
-            const statusOrder = { viewing: 0, pending: 1, answered: 2 };
-            const orderA = statusOrder[a.status] || 3;
-            const orderB = statusOrder[b.status] || 3;
-            
-            if (orderA !== orderB) {
-                return orderA - orderB;
-            }
-            
-            // Within answered, sort by time
-            if (a.status === 'answered' && b.status === 'answered') {
-                const timeA = new Date(a.answered_at || 0).getTime();
-                const timeB = new Date(b.answered_at || 0).getTime();
-                return timeB - timeA;
-            }
-            
-            return 0;
-        });
+        // Sort students based on selected sort mode
+        if (sortBy === 'name') {
+            students.sort((a, b) => {
+                return (a.display_name || '').localeCompare(b.display_name || '');
+            });
+        } else if (sortBy === 'response') {
+            students.sort((a, b) => {
+                // Sort by status first (viewing, pending, then answered by time)
+                const statusOrder = { viewing: 0, pending: 1, answered: 2 };
+                const orderA = statusOrder[a.status] || 3;
+                const orderB = statusOrder[b.status] || 3;
+                
+                if (orderA !== orderB) {
+                    return orderA - orderB;
+                }
+                
+                // Within answered, sort by time (earliest first)
+                if (a.status === 'answered' && b.status === 'answered') {
+                    const timeA = new Date(a.answered_at || 0).getTime();
+                    const timeB = new Date(b.answered_at || 0).getTime();
+                    return timeA - timeB;
+                }
+                
+                return 0;
+            });
+        }
         
         const pendingCount = students.filter(s => s.status === 'pending').length;
         const viewingCount = students.filter(s => s.status === 'viewing').length;
@@ -242,20 +251,33 @@ function renderMonitor() {
         const pushedTime = new Date(quiz.pushed_at);
         const timeAgo = getTimeAgo(pushedTime);
         
+        // Truncate quiz title to max 45 chars
+        const titleShort = quiz.quiz_title.length > 45 
+            ? quiz.quiz_title.substring(0, 45) + '...' 
+            : quiz.quiz_title;
+        
         return `
-            <div class="quiz-card">
-                <div class="quiz-card-header">
-                    <div class="quiz-title">${escapeHtml(quiz.quiz_title)}</div>
-                    <button class="quiz-info-icon" data-push-id="${quiz.push_id}" data-quiz-title="${escapeHtml(quiz.quiz_title)}" data-pushed-at="${quiz.pushed_at}" data-push-id-full="${quiz.push_id}">ℹ️</button>
-                    <div class="quiz-badge badge-active">ACTIVE</div>
+            <div class="quiz-column">
+                <div class="quiz-column-header">
+                    <div class="quiz-header-content">
+                        <div style="flex: 1;">
+                            <div class="quiz-title-short">${escapeHtml(titleShort)}</div>
+                            <div class="quiz-meta-short">
+                                ⏰ ${timeAgo} | 📝 ${answeredCount}/${students.length}
+                            </div>
+                        </div>
+                        <button class="quiz-info-icon" 
+                            data-push-id="${quiz.push_id}" 
+                            data-quiz-title="${escapeHtml(quiz.quiz_title)}" 
+                            data-pushed-at="${quiz.pushed_at}"
+                            data-student-count="${students.length}"
+                            data-answered-count="${answeredCount}">ℹ️</button>
+                    </div>
                 </div>
-                <div class="quiz-meta">
-                    <span class="quiz-meta-item">⏰ ${timeAgo}</span>
-                    <span class="quiz-meta-item">📝 ${answeredCount}/${students.length}</span>
-                </div>
-                <div class="student-list">
-                    ${students.length > 0 ? students.map(student => renderStudentItem(student)).join('') : 
-                        '<div class="empty-state">No students in queue</div>'}
+                <div class="students-list">
+                    ${students.length > 0 ? 
+                        students.map((student, index) => renderStudentRow(student, index + 1)).join('') 
+                        : '<div class="empty-students">No students in queue</div>'}
                 </div>
             </div>
         `;
@@ -265,6 +287,55 @@ function renderMonitor() {
     setupTooltips();
     
     updateStats(quizzes.length, totalStudents, totalPending, totalAnswered);
+}
+
+function renderStudentRow(student, number) {
+    const statusClass = student.status === 'answered' ? 
+        (student.is_correct ? 'correct' : 'incorrect') : 
+        student.status;
+    
+    // Add 'revealed' class if correctness is shown
+    const revealedClass = isCorrectnessRevealed && student.status === 'answered' ? 'revealed' : '';
+    
+    let statusContent = '';
+    if (student.status === 'pending') {
+        statusContent = '<span class="status-indicator status-pending">⏳</span>';
+    } else if (student.status === 'viewing') {
+        statusContent = '<span class="status-indicator status-viewing">👁️</span>';
+    } else if (student.status === 'answered') {
+        const elapsed = student.elapsed_ms ? Math.round(student.elapsed_ms / 1000) : 0;
+        const statusColorClass = (student.is_correct ? '' : 'incorrect') + (isCorrectnessRevealed ? ' revealed' : '');
+        statusContent = `<span class="status-indicator status-answered ${statusColorClass}">${elapsed}s</span>`;
+    }
+    
+    // Correctness indicator (revealed only if toggle is on)
+    let correctnessIndicator = '';
+    if (student.status === 'answered' && student.is_correct !== undefined && student.is_correct !== null) {
+        const symbol = student.is_correct ? '✓' : '✗';
+        const correctnessClass = student.is_correct ? 'correct' : 'incorrect';
+        const indicatorRevealedClass = isCorrectnessRevealed ? 'revealed' : '';
+        correctnessIndicator = `
+            <span class="correctness-indicator ${correctnessClass} ${indicatorRevealedClass}">
+                ${symbol}
+            </span>
+        `;
+    }
+    
+    // Truncate student name to max 18 chars
+    const nameShort = student.display_name.length > 18 
+        ? student.display_name.substring(0, 18) + '...' 
+        : student.display_name;
+    
+    return `
+        <div class="student-row ${student.status} ${statusClass} ${revealedClass}" title="${escapeHtml(student.display_name)}">
+            <span class="student-number">${number}</span>
+            <span class="student-name-short">${escapeHtml(nameShort)}</span>
+            <div class="student-status-info">
+                ${statusContent}
+                ${correctnessIndicator}
+            </div>
+        </div>
+    `;
 }
 
 function setupTooltips() {
@@ -282,14 +353,16 @@ function setupTooltips() {
     // Add event listeners to all info icons
     document.querySelectorAll('.quiz-info-icon').forEach(icon => {
         icon.addEventListener('mouseenter', (e) => {
-            const pushId = e.target.getAttribute('data-push-id-full');
+            const pushId = e.target.getAttribute('data-push-id');
             const quizTitle = e.target.getAttribute('data-quiz-title');
             const pushedAt = e.target.getAttribute('data-pushed-at');
+            const studentCount = e.target.getAttribute('data-student-count');
+            const answeredCount = e.target.getAttribute('data-answered-count');
             const pushedTime = new Date(pushedAt);
             
             tooltip.innerHTML = `
                 <div class="quiz-info-tooltip-item">
-                    <div class="quiz-info-tooltip-label">Quiz Title</div>
+                    <div class="quiz-info-tooltip-label">Full Quiz Title</div>
                     <div>${quizTitle}</div>
                 </div>
                 <div class="quiz-info-tooltip-item">
@@ -299,6 +372,10 @@ function setupTooltips() {
                 <div class="quiz-info-tooltip-item">
                     <div class="quiz-info-tooltip-label">Pushed At</div>
                     <div>${pushedTime.toLocaleString()}</div>
+                </div>
+                <div class="quiz-info-tooltip-item">
+                    <div class="quiz-info-tooltip-label">Progress</div>
+                    <div>${answeredCount} / ${studentCount} answered</div>
                 </div>
             `;
             
@@ -312,45 +389,6 @@ function setupTooltips() {
             tooltip.classList.remove('show');
         });
     });
-}
-
-function renderStudentItem(student) {
-    const statusClass = student.status === 'answered' ? 
-        (student.is_correct ? 'correct' : 'incorrect') : 
-        student.status;
-    
-    let statusBadge = '';
-    if (student.status === 'pending') {
-        statusBadge = '<span class="status-badge badge-pending">⏳</span>';
-    } else if (student.status === 'viewing') {
-        statusBadge = '<span class="status-badge badge-viewing">👁️</span>';
-    } else if (student.status === 'answered') {
-        const elapsed = student.elapsed_ms ? Math.round(student.elapsed_ms / 1000) : 0;
-        statusBadge = `<span class="status-badge badge-answered">${elapsed}s</span>`;
-    }
-    
-    // Correctness indicator (revealed only if toggle is on)
-    let correctnessIndicator = '';
-    if (student.status === 'answered' && student.is_correct !== undefined && student.is_correct !== null) {
-        const symbol = student.is_correct ? '✓' : '✗';
-        const correctnessClass = student.is_correct ? 'correct' : 'incorrect';
-        const revealedClass = isCorrectnessRevealed ? 'revealed' : '';
-        correctnessIndicator = `
-            <span class="correctness-indicator ${correctnessClass} ${revealedClass}">
-                ${symbol}
-            </span>
-        `;
-    }
-    
-    return `
-        <div class="student-item ${student.status} ${statusClass}">
-            <span class="student-name">${escapeHtml(student.display_name)}</span>
-            <div class="student-status">
-                ${statusBadge}
-                ${correctnessIndicator}
-            </div>
-        </div>
-    `;
 }
 
 function updateStats(activeQuizzes, totalStudents, totalPending, totalAnswered) {
@@ -532,6 +570,20 @@ function renderRankings(data) {
 // Event listeners
 document.getElementById('correctnessToggle')?.addEventListener('change', toggleCorrectness);
 document.getElementById('refreshBtn')?.addEventListener('click', refreshMonitor);
+
+// Sort button listeners
+document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        sortBy = btn.getAttribute('data-sort');
+        
+        // Update active state
+        document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Re-render with new sort
+        renderMonitor();
+    });
+});
 
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {

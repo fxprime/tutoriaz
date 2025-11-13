@@ -1480,6 +1480,7 @@
                             const activePushIdEscaped = escapeHtml(String(activePushId));
                             return `
                             <div class="quiz-item" data-quiz-id="${quiz.id}">
+                                <input type="checkbox" class="quiz-checkbox" data-quiz-id="${quiz.id}" ${isSent ? 'disabled' : ''}>
                                 <h5>
                                     ${quiz.title}
                                     ${isSent ? `<span class="sent-badge">📤 SENT at ${sentTime}</span>` : ''}
@@ -1531,6 +1532,158 @@
             quizListContainer.removeEventListener('click', handleQuizActionClick);
             // Add new listener
             quizListContainer.addEventListener('click', handleQuizActionClick);
+
+            // Setup multi-select toggle button
+            const toggleBtn = document.getElementById('toggleMultiSelectBtn');
+            if (toggleBtn) {
+                toggleBtn.removeEventListener('click', toggleMultiSelect);
+                toggleBtn.addEventListener('click', toggleMultiSelect);
+            }
+
+            // Setup push selected button
+            const pushSelectedBtn = document.getElementById('pushSelectedBtn');
+            if (pushSelectedBtn) {
+                pushSelectedBtn.removeEventListener('click', pushSelectedQuizzes);
+                pushSelectedBtn.addEventListener('click', pushSelectedQuizzes);
+            }
+
+            // Setup checkbox change handler (delegated)
+            quizListContainer.removeEventListener('change', handleCheckboxChange);
+            quizListContainer.addEventListener('change', handleCheckboxChange);
+        }
+
+        let isMultiSelectMode = false;
+
+        function toggleMultiSelect() {
+            isMultiSelectMode = !isMultiSelectMode;
+            const quizListContainer = document.getElementById('quizList');
+            const toggleBtn = document.getElementById('toggleMultiSelectBtn');
+            const pushBtn = document.getElementById('pushSelectedBtn');
+            
+            if (isMultiSelectMode) {
+                quizListContainer.classList.add('multi-select-mode');
+                toggleBtn.textContent = '✖️ Cancel Multi-Select';
+                toggleBtn.style.background = '#ff5252';
+                if (pushBtn) pushBtn.style.display = 'inline-block';
+            } else {
+                quizListContainer.classList.remove('multi-select-mode');
+                toggleBtn.textContent = '☑️ Multi-Select';
+                toggleBtn.style.background = '#4CAF50';
+                if (pushBtn) pushBtn.style.display = 'none';
+                
+                // Clear all checkboxes
+                document.querySelectorAll('.quiz-checkbox:checked').forEach(cb => cb.checked = false);
+                document.querySelectorAll('.quiz-item.selected').forEach(item => item.classList.remove('selected'));
+                updateSelectedCount();
+            }
+        }
+
+        function handleCheckboxChange(event) {
+            if (!event.target.classList.contains('quiz-checkbox')) return;
+            
+            const quizItem = event.target.closest('.quiz-item');
+            if (event.target.checked) {
+                quizItem.classList.add('selected');
+            } else {
+                quizItem.classList.remove('selected');
+            }
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.quiz-checkbox:checked').length;
+            const countSpan = document.getElementById('selectedCount');
+            const pushBtn = document.getElementById('pushSelectedBtn');
+            
+            if (countSpan) countSpan.textContent = count;
+            if (pushBtn) pushBtn.disabled = count === 0;
+        }
+
+        async function pushSelectedQuizzes() {
+            if (!selectedCourseId) {
+                showNotification('Select a course before pushing quizzes.', 'error');
+                return;
+            }
+
+            const checkboxes = document.querySelectorAll('.quiz-checkbox:checked');
+            const quizIds = Array.from(checkboxes).map(cb => cb.getAttribute('data-quiz-id'));
+            
+            if (quizIds.length === 0) {
+                showNotification('No quizzes selected', 'warning');
+                return;
+            }
+
+            const pushBtn = document.getElementById('pushSelectedBtn');
+            const originalText = pushBtn.textContent;
+            pushBtn.disabled = true;
+            pushBtn.textContent = '⏳ Pushing...';
+
+            try {
+                const response = await fetch('/api/pushes/bulk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        quiz_ids: quizIds,
+                        course_id: selectedCourseId
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Track active pushes
+                    data.pushed_quizzes.forEach(result => {
+                        const quiz = quizzes.find(q => String(q.id) === String(result.quiz_id));
+                        const pushedMeta = {
+                            push_id: result.push_id,
+                            quiz_id: String(result.quiz_id),
+                            course_id: selectedCourseId,
+                            started_at: new Date().toISOString(),
+                            title: result.quiz_title
+                        };
+                        const mapKey = String(result.quiz_id || '').trim();
+                        if (mapKey) {
+                            activePushesByQuiz.set(mapKey, pushedMeta);
+                            activeResponses.set(result.push_id, []);
+                        }
+                    });
+
+                    // Clear selection and exit multi-select mode
+                    isMultiSelectMode = false;
+                    const quizListContainer = document.getElementById('quizList');
+                    quizListContainer.classList.remove('multi-select-mode');
+                    const toggleBtn = document.getElementById('toggleMultiSelectBtn');
+                    toggleBtn.textContent = '☑️ Multi-Select';
+                    toggleBtn.style.background = '#4CAF50';
+                    pushBtn.style.display = 'none';
+                    
+                    document.querySelectorAll('.quiz-checkbox:checked').forEach(cb => cb.checked = false);
+                    document.querySelectorAll('.quiz-item.selected').forEach(item => item.classList.remove('selected'));
+                    updateSelectedCount();
+                    
+                    // Re-render to show sent badges
+                    renderQuizzes();
+                    updateQueueStatus();
+
+                    const successMsg = `Pushed ${data.pushed_quizzes.length} quiz${data.pushed_quizzes.length > 1 ? 'zes' : ''} to ${data.total_students} student${data.total_students > 1 ? 's' : ''}`;
+                    if (data.failed_quizzes.length > 0) {
+                        showNotification(`${successMsg}. ${data.failed_quizzes.length} failed.`, 'warning');
+                    } else {
+                        showNotification(successMsg, 'success');
+                    }
+                } else {
+                    showNotification(data.error || 'Failed to push quizzes', 'error');
+                }
+            } catch (error) {
+                console.error('Bulk push error:', error);
+                showNotification('Network error', 'error');
+            } finally {
+                pushBtn.disabled = false;
+                pushBtn.textContent = originalText;
+            }
         }
 
         function handleQuizActionClick(event) {

@@ -3941,6 +3941,190 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
     }
 });
 
+// Bulk push multiple quizzes
+app.post('/api/pushes/bulk', authenticateToken, async (req, res) => {
+    req.setTimeout(300000); // 5 minutes timeout for bulk operations
+    
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { quiz_ids, course_id } = req.body;
+        
+        if (!quiz_ids || !Array.isArray(quiz_ids) || quiz_ids.length === 0) {
+            return res.status(400).json({ error: 'Quiz IDs array required' });
+        }
+
+        if (!course_id) {
+            return res.status(400).json({ error: 'Course ID required' });
+        }
+
+        // Verify course ownership
+        const course = await ensureTeacherOwnsCourse(req.user.userId, course_id);
+        if (!course) {
+            return res.status(404).json({ error: 'Course not found or access denied' });
+        }
+
+        // Get enrolled students
+        const enrolledRows = await new Promise((resolve, reject) => {
+            db.all('SELECT student_id FROM course_enrollments WHERE course_id = ?', [course_id], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        const enrolledSet = new Set(enrolledRows.map(row => row.student_id));
+
+        // Get connected students
+        const targetStudents = Array.from(connectedUsers.values())
+            .filter(user => {
+                return user.role === 'student' && 
+                       enrolledSet.has(user.userId) && 
+                       user.activeCourseId === course_id;
+            });
+
+        const results = {
+            total_quizzes: quiz_ids.length,
+            pushed_quizzes: [],
+            failed_quizzes: [],
+            total_students: targetStudents.length,
+            total_added: 0,
+            total_skipped: 0
+        };
+
+        // Process each quiz
+        for (const quiz_id of quiz_ids) {
+            try {
+                // Get quiz details
+                const quiz = await new Promise((resolve, reject) => {
+                    db.get('SELECT * FROM quizzes WHERE id = ? AND created_by = ?', [quiz_id, req.user.userId], (err, row) => {
+                        if (err) reject(err);
+                        else if (!row) reject(new Error('Quiz not found'));
+                        else {
+                            resolve({
+                                ...row,
+                                images: JSON.parse(row.images || '[]'),
+                                options: JSON.parse(row.options || '[]')
+                            });
+                        }
+                    });
+                });
+
+                // Verify quiz belongs to course
+                if (quiz.course_id !== course_id) {
+                    results.failed_quizzes.push({ quiz_id, error: 'Quiz does not belong to the course' });
+                    continue;
+                }
+
+                // Create push
+                const push = {
+                    id: uuidv4(),
+                    quiz_id,
+                    pushed_by: req.user.userId,
+                    target_scope: 'all',
+                    timeout_seconds: quiz.timeout_seconds || 60,
+                    course_id: course_id
+                };
+
+                await createPushInDB(push);
+
+                let addedCount = 0;
+                let skippedCount = 0;
+
+                // Add to each student's queue
+                const batchSize = 20;
+                const studentBatches = [];
+                for (let i = 0; i < targetStudents.length; i += batchSize) {
+                    studentBatches.push(targetStudents.slice(i, i + batchSize));
+                }
+
+                for (const batch of studentBatches) {
+                    const batchResults = await Promise.all(
+                        batch.map(async (student) => {
+                            try {
+                                const alreadyInQueue = await checkQuizInStudentQueue(student.userId, quiz_id, course_id);
+                                if (alreadyInQueue) return { status: 'skipped' };
+
+                                const alreadyAnswered = await checkQuizAlreadyAnswered(student.userId, quiz_id);
+                                if (alreadyAnswered) return { status: 'skipped' };
+
+                                const result = await addToStudentQueue(student.userId, push.id, quiz_id, quiz);
+                                if (result.added) {
+                                    const snapshot = await getQueueSnapshot(student.userId, course_id);
+                                    syncStudentQueueCache(student.userId, snapshot);
+                                    io.to(student.socketId).emit('quiz_queue_updated', buildQueueUpdatePayload(snapshot));
+                                    if (snapshot.currentQuiz && snapshot.currentQuiz.push_id === push.id) {
+                                        io.to(student.socketId).emit('show_next_quiz', buildShowQuizPayload(snapshot.currentQuiz));
+                                    }
+                                    return { status: 'added' };
+                                }
+                                return { status: 'skipped' };
+                            } catch (err) {
+                                return { status: 'error' };
+                            }
+                        })
+                    );
+
+                    batchResults.forEach(result => {
+                        if (result.status === 'added') addedCount++;
+                        else skippedCount++;
+                    });
+                }
+
+                // Store active push metadata
+                const activeMeta = {
+                    ...push,
+                    quiz,
+                    targetUsers: targetStudents.map(s => s.userId),
+                    started_at: new Date().toISOString()
+                };
+
+                activePushes.set(push.id, activeMeta);
+                activePushesByQuiz.set(push.quiz_id, activeMeta);
+
+                schedulePushTimeoutCheck(push.id).catch((error) => {
+                    console.error('schedulePushTimeoutCheck error:', error);
+                });
+
+                results.pushed_quizzes.push({
+                    quiz_id,
+                    push_id: push.id,
+                    quiz_title: quiz.title,
+                    added_count: addedCount,
+                    skipped_count: skippedCount
+                });
+
+                results.total_added += addedCount;
+                results.total_skipped += skippedCount;
+
+            } catch (error) {
+                console.error(`Error pushing quiz ${quiz_id}:`, error);
+                results.failed_quizzes.push({ quiz_id, error: error.message });
+            }
+        }
+
+        // Notify teachers
+        const teachers = Array.from(connectedUsers.values())
+            .filter(user => user.role === 'teacher');
+        
+        teachers.forEach(teacher => {
+            io.to(teacher.socketId).emit('push_created', {
+                bulk: true,
+                course_id: course_id,
+                total_quizzes: results.pushed_quizzes.length,
+                total_students: targetStudents.length,
+                message: `${results.pushed_quizzes.length} quizzes pushed to ${targetStudents.length} students`
+            });
+        });
+
+        res.json(results);
+    } catch (error) {
+        console.error('Bulk push error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Get push details for monitor (teacher only)
 app.get('/api/pushes/:pushId/details', authenticateToken, async (req, res) => {
     try {
