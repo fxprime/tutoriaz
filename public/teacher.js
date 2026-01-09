@@ -642,7 +642,7 @@
                 
                 // Listen for clone progress
                 socket.on('clone-progress', (data) => {
-                    if (data.userId === currentUser.userId) {
+                    if (data.userId === user.userId) {
                         const progressBar = document.querySelector('.notification.info .progress-bar');
                         const progressText = document.querySelector('.notification.info .notification-text');
                         
@@ -675,8 +675,6 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
-                
                 // Remove progress listener
                 socket.off('clone-progress');
                 
@@ -684,6 +682,15 @@
                 if (progressNotification) {
                     progressNotification.remove();
                 }
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
                 
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to create course');

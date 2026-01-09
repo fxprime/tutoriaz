@@ -388,15 +388,22 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
         }
         console.log(`Local docs path: ${localPath}`);
         
-        // Build the MkDocs site
-        try {
-            await buildMkDocsSite(repoFolderName, onProgress);
-            if (onProgress) onProgress({ step: 'complete', message: 'Repository cloned and built successfully!', progress: 100 });
-        } catch (buildError) {
-            console.error('Warning: MkDocs build failed:', buildError.message);
-            if (onProgress) onProgress({ step: 'warning', message: 'Cloned successfully but build failed. You may need to build manually.', progress: 100 });
-            // Don't throw - allow course creation to succeed even if build fails
-        }
+        // Build the MkDocs site in background (don't wait)
+        // This allows the HTTP response to return quickly
+        setImmediate(async () => {
+            try {
+                if (onProgress) onProgress({ step: 'building', message: 'Building documentation site...', progress: 95 });
+                await buildMkDocsSite(repoFolderName, onProgress);
+                if (onProgress) onProgress({ step: 'complete', message: 'Repository cloned and built successfully!', progress: 100 });
+                console.log(`Background build completed for ${repoFolderName}`);
+            } catch (buildError) {
+                console.error('Warning: Background MkDocs build failed:', buildError.message);
+                if (onProgress) onProgress({ step: 'warning', message: 'Cloned successfully but build failed. You may need to build manually.', progress: 100 });
+            }
+        });
+        
+        // Return immediately with success (build happens in background)
+        if (onProgress) onProgress({ step: 'complete', message: 'Repository cloned successfully! Building in background...', progress: 95 });
         
         return { success: true, path: repoPath, folderName: repoFolderName, siteUrl, localPath };
 

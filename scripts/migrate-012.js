@@ -3,6 +3,7 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
+require('dotenv').config();
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'database.sqlite');
 const MIGRATION_FILE = path.join(__dirname, '..', 'migrations', '012_add_docs_paths.sql');
