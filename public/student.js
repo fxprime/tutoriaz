@@ -658,8 +658,11 @@
         function loadCourseDocumentation(courseData) {
             console.log('Loading course documentation for:', courseData);
             
-            if (courseData.docs_repo_url) {
-                console.log('Documentation URL found:', courseData.docs_repo_url);
+            // Use docs_local_path if available, otherwise fall back to docs_repo_url
+            const docsPath = courseData.docs_local_path || courseData.docs_repo_url;
+            
+            if (docsPath) {
+                console.log('Documentation path found:', docsPath);
                 const docsContainer = document.getElementById('courseDocsContainer');
                 const docsFrame = document.getElementById('courseDocsFrame');
                 const docsControls = document.querySelector('.docs-controls');
@@ -669,7 +672,7 @@
                     if (docsControls) docsControls.style.display = 'flex';
                     
                     // Construct documentation URL
-                    let docsUrl = courseData.docs_repo_url;
+                    let docsUrl = docsPath;
                     
                     // Check if it's a local path (starts with /)
                     if (docsUrl.startsWith('/')) {

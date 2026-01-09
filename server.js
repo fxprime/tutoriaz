@@ -14,7 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const multer = require('multer');
 const sharp = require('sharp');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 // Custom XSS filter options for markdown content with code blocks
 const xssOptionsForMarkdown = new xss.FilterXSS({
@@ -49,15 +49,24 @@ function sanitizeMarkdownContent(content) {
 function isGitUrl(url) {
     if (!url || typeof url !== 'string') return false;
     const trimmed = url.trim();
-    // Check for common git URL patterns
-    return /^(https?:\/\/|git@|ssh:\/\/).*\.git$/i.test(trimmed) ||
-           /^(https?:\/\/)(github\.com|gitlab\.com|bitbucket\.org)/i.test(trimmed);
+    // Check for SSH format: git@github.com:user/repo.git or git@github.com:user/repo
+    if (/^git@[\w\-\.]+:[\w\-\/]+/.test(trimmed)) return true;
+    // Check for HTTPS with .git
+    if (/^https?:\/\/.*\.git$/i.test(trimmed)) return true;
+    // Check for HTTPS without .git from common platforms
+    if (/^https?:\/\/(github\.com|gitlab\.com|bitbucket\.org)/i.test(trimmed)) return true;
+    return false;
 }
 
 // Helper function to sanitize folder name from git URL
 function getRepoFolderName(gitUrl) {
-    // Extract repo name from URL (e.g., https://github.com/user/repo.git -> repo)
-    const match = gitUrl.match(/\/([^\/]+?)(\.git)?$/);
+    // Extract repo name from SSH URL (e.g., git@github.com:user/repo.git -> repo)
+    let match = gitUrl.match(/:([^\/]+\/)?([^\/]+?)(\.git)?$/);
+    if (match && match[2]) {
+        return match[2].replace(/\.git$/, '');
+    }
+    // Extract repo name from HTTPS URL (e.g., https://github.com/user/repo.git -> repo)
+    match = gitUrl.match(/\/([^\/]+?)(\.git)?$/);
     if (match && match[1]) {
         return match[1].replace(/\.git$/, '');
     }
@@ -72,8 +81,187 @@ function isMkDocsProject(dirPath) {
     return fs.existsSync(mkdocsYmlPath) || fs.existsSync(mkdocsYamlPath);
 }
 
+// Helper function to read site_url from mkdocs.yml
+function getMkDocsSiteUrl(dirPath) {
+    try {
+        const mkdocsYmlPath = path.join(dirPath, 'mkdocs.yml');
+        const mkdocsYamlPath = path.join(dirPath, 'mkdocs.yaml');
+        
+        let configPath = null;
+        if (fs.existsSync(mkdocsYmlPath)) {
+            configPath = mkdocsYmlPath;
+        } else if (fs.existsSync(mkdocsYamlPath)) {
+            configPath = mkdocsYamlPath;
+        }
+        
+        if (!configPath) return null;
+        
+        const content = fs.readFileSync(configPath, 'utf8');
+        // Simple regex to extract site_url (not full YAML parsing)
+        const match = content.match(/^site_url:\s*(.+)$/m);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+        return null;
+    } catch (error) {
+        console.error('Error reading mkdocs config:', error.message);
+        return null;
+    }
+}
+
+// Helper function to add entry to .gitmodules
+function addToGitmodules(repoUrl, repoFolderName, branch = 'main') {
+    try {
+        const gitmodulesPath = path.join(__dirname, '.gitmodules');
+        const submodulePath = `courses/${repoFolderName}`;
+        
+        // Check if entry already exists
+        if (fs.existsSync(gitmodulesPath)) {
+            const content = fs.readFileSync(gitmodulesPath, 'utf8');
+            if (content.includes(`path = ${submodulePath}`)) {
+                console.log('.gitmodules entry already exists, skipping');
+                return;
+            }
+        }
+        
+        // Add new entry
+        const entry = `\n[submodule "${submodulePath}"]\n\tpath = ${submodulePath}\n\turl = ${repoUrl}\n\tbranch = ${branch}\n`;
+        fs.appendFileSync(gitmodulesPath, entry, 'utf8');
+        console.log(`Added ${submodulePath} to .gitmodules`);
+    } catch (error) {
+        console.error('Error updating .gitmodules:', error.message);
+    }
+}
+
+// Helper function to remove entry from .gitmodules
+function removeFromGitmodules(repoFolderName) {
+    try {
+        const gitmodulesPath = path.join(__dirname, '.gitmodules');
+        if (!fs.existsSync(gitmodulesPath)) {
+            return;
+        }
+        
+        const submodulePath = `courses/${repoFolderName}`;
+        let content = fs.readFileSync(gitmodulesPath, 'utf8');
+        
+        // Remove the submodule section
+        const regex = new RegExp(`\\[submodule "${submodulePath}"\\][^\\[]*`, 'g');
+        content = content.replace(regex, '');
+        
+        // Clean up extra newlines
+        content = content.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+        
+        fs.writeFileSync(gitmodulesPath, content, 'utf8');
+        console.log(`Removed ${submodulePath} from .gitmodules`);
+        
+        // Try to remove from git cache if in a git repo
+        try {
+            execSync(`git config -f .gitmodules --remove-section "submodule.${submodulePath}"`, { 
+                cwd: __dirname, 
+                stdio: 'ignore' 
+            });
+            execSync(`git rm --cached "${submodulePath}"`, { 
+                cwd: __dirname, 
+                stdio: 'ignore' 
+            });
+        } catch (e) {
+            // Ignore errors - might not be in a git repo
+        }
+    } catch (error) {
+        console.error('Error removing from .gitmodules:', error.message);
+    }
+}
+
+// Helper function to remove course directory
+function removeCourseDirectory(repoFolderName) {
+    try {
+        const coursePath = path.join(__dirname, 'courses', repoFolderName);
+        if (fs.existsSync(coursePath)) {
+            execSync(`rm -rf "${coursePath}"`, { cwd: __dirname });
+            console.log(`Removed course directory: courses/${repoFolderName}`);
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error removing course directory:', error.message);
+        return false;
+    }
+}
+
+// Helper function to build MkDocs documentation
+async function buildMkDocsSite(repoFolderName, onProgress = null) {
+    try {
+        const coursePath = path.join(__dirname, 'courses', repoFolderName);
+        const venvPath = path.join(__dirname, 'courses', 'venv');
+        
+        // Check if course directory exists
+        if (!fs.existsSync(coursePath)) {
+            throw new Error(`Course directory not found: ${repoFolderName}`);
+        }
+        
+        // Check if mkdocs.yml exists
+        if (!isMkDocsProject(coursePath)) {
+            throw new Error('Not a valid MkDocs project');
+        }
+        
+        // Check if virtual environment exists
+        if (!fs.existsSync(venvPath)) {
+            throw new Error('Python virtual environment not found. Run setup.sh first.');
+        }
+        
+        console.log(`Building MkDocs site for: ${repoFolderName}`);
+        if (onProgress) onProgress({ step: 'building', message: 'Building documentation site...', progress: 95 });
+        
+        return new Promise((resolve, reject) => {
+            // Run mkdocs build using the virtual environment
+            const activateCmd = `source "${venvPath}/bin/activate"`;
+            const buildCmd = `cd "${coursePath}" && mkdocs build --clean`;
+            const fullCmd = `${activateCmd} && ${buildCmd}`;
+            
+            const buildProcess = spawn('bash', ['-c', fullCmd], {
+                cwd: __dirname
+            });
+            
+            let stdout = '';
+            let stderr = '';
+            
+            buildProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
+                console.log(`MkDocs build: ${data.toString().trim()}`);
+            });
+            
+            buildProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+                console.error(`MkDocs build error: ${data.toString().trim()}`);
+            });
+            
+            buildProcess.on('close', (code) => {
+                if (code === 0) {
+                    console.log(`Successfully built MkDocs site for ${repoFolderName}`);
+                    resolve({ success: true, output: stdout });
+                } else {
+                    reject(new Error(`MkDocs build failed with code ${code}: ${stderr}`));
+                }
+            });
+            
+            buildProcess.on('error', (err) => {
+                reject(new Error(`Failed to run mkdocs build: ${err.message}`));
+            });
+            
+            // Timeout after 120 seconds
+            setTimeout(() => {
+                buildProcess.kill();
+                reject(new Error('MkDocs build timed out'));
+            }, 120000);
+        });
+    } catch (error) {
+        console.error('Error building MkDocs site:', error.message);
+        throw error;
+    }
+}
+
 // Helper function to clone git repository as submodule
-async function cloneGitRepoAsSubmodule(gitUrl, targetDir) {
+async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
     try {
         const coursesDir = path.join(__dirname, 'courses');
         
@@ -89,63 +277,133 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir) {
         if (fs.existsSync(repoPath)) {
             // Check if it's an MkDocs project
             if (isMkDocsProject(repoPath)) {
-                return { success: true, path: repoPath, folderName: repoFolderName };
+                console.log(`Repository already exists at courses/${repoFolderName}, skipping clone`);
+                if (onProgress) onProgress({ step: 'exists', message: 'Repository already exists, using cached version' });
+                const siteUrl = getMkDocsSiteUrl(repoPath);
+                const localPath = `/docs/${repoFolderName}/site/`;
+                return { success: true, path: repoPath, folderName: repoFolderName, siteUrl, localPath };
             } else {
                 throw new Error('Directory exists but is not an MkDocs project');
             }
         }
 
-        // Clone the repository as a submodule
         console.log(`Cloning git repository: ${gitUrl} to courses/${repoFolderName}`);
+        if (onProgress) onProgress({ step: 'starting', message: 'Initializing repository clone...' });
         
-        // First, check if we're in a git repo to use submodule, otherwise just clone
-        let isGitRepo = false;
-        try {
-            execSync('git rev-parse --git-dir', { cwd: __dirname, stdio: 'ignore' });
-            isGitRepo = true;
-        } catch (e) {
-            isGitRepo = false;
+        // Try direct clone with progress tracking
+        const cloneSuccess = await new Promise((resolve, reject) => {
+            if (onProgress) onProgress({ step: 'cloning', message: 'Cloning repository...', progress: 10 });
+            
+            const gitProcess = spawn('git', ['clone', '--depth', '1', '--progress', gitUrl, repoPath], {
+                cwd: __dirname
+            });
+
+            let errorOutput = '';
+            
+            gitProcess.stderr.on('data', (data) => {
+                const output = data.toString();
+                errorOutput += output;
+                
+                // Parse git progress (git outputs to stderr)
+                if (output.includes('Receiving objects:') || output.includes('Resolving deltas:')) {
+                    const percentMatch = output.match(/(\d+)%/);
+                    if (percentMatch && onProgress) {
+                        const percent = parseInt(percentMatch[1]);
+                        const adjustedPercent = 10 + (percent * 0.7); // Scale to 10-80%
+                        onProgress({ 
+                            step: 'cloning', 
+                            message: `Cloning repository... ${percent}%`,
+                            progress: Math.floor(adjustedPercent)
+                        });
+                    }
+                }
+            });
+
+            gitProcess.on('close', (code) => {
+                if (code === 0) {
+                    resolve(true);
+                } else {
+                    reject(new Error(`Git clone failed: ${errorOutput}`));
+                }
+            });
+
+            gitProcess.on('error', (err) => {
+                reject(new Error(`Failed to spawn git: ${err.message}`));
+            });
+
+            // Timeout after 60 seconds
+            setTimeout(() => {
+                gitProcess.kill();
+                reject(new Error('Clone operation timed out'));
+            }, 60000);
+        });
+
+        if (!cloneSuccess) {
+            throw new Error('Clone failed');
         }
 
-        if (isGitRepo) {
-            // Add as submodule
-            execSync(`git submodule add "${gitUrl}" "courses/${repoFolderName}"`, {
-                cwd: __dirname,
-                stdio: 'pipe'
-            });
-            execSync(`git submodule update --init --recursive`, {
-                cwd: __dirname,
-                stdio: 'pipe'
-            });
-        } else {
-            // Just clone directly
-            execSync(`git clone "${gitUrl}" "${repoPath}"`, {
-                cwd: __dirname,
-                stdio: 'pipe'
-            });
-        }
+        if (onProgress) onProgress({ step: 'validating', message: 'Validating MkDocs project...', progress: 85 });
 
         // Verify it's an MkDocs project
         if (!isMkDocsProject(repoPath)) {
             // Cleanup cloned repo
-            execSync(`rm -rf "${repoPath}"`, { cwd: __dirname });
-            if (isGitRepo) {
-                try {
-                    execSync(`git rm -f "courses/${repoFolderName}"`, { cwd: __dirname, stdio: 'ignore' });
-                    execSync(`git config -f .gitmodules --remove-section submodule.courses/${repoFolderName}`, { cwd: __dirname, stdio: 'ignore' });
-                } catch (e) {
-                    // Ignore cleanup errors
-                }
+            try {
+                execSync(`rm -rf "${repoPath}"`, { cwd: __dirname, stdio: 'ignore' });
+            } catch (cleanupError) {
+                console.error('Error during cleanup:', cleanupError.message);
             }
-            throw new Error('Repository is not an MkDocs project (missing mkdocs.yml)');
+            throw new Error('Repository is not an MkDocs project (missing mkdocs.yml or mkdocs.yaml)');
         }
 
+        if (onProgress) onProgress({ step: 'finalizing', message: 'Setting up documentation...', progress: 90 });
+
+        // Add to .gitmodules and initialize as submodule
+        addToGitmodules(gitUrl, repoFolderName, 'main');
+        
+        // Try to register it as a proper submodule with git
+        try {
+            // Check if we're in a git repo
+            execSync('git rev-parse --git-dir', { cwd: __dirname, stdio: 'ignore' });
+            
+            // Initialize the submodule (registers it with git)
+            execSync(`git submodule init "courses/${repoFolderName}"`, { 
+                cwd: __dirname, 
+                stdio: 'ignore' 
+            });
+            console.log(`Registered courses/${repoFolderName} as git submodule`);
+        } catch (e) {
+            // Not a git repo or submodule init failed - that's okay
+            console.log('Could not register as git submodule (continuing anyway)');
+        }
+
+        // Read site_url from mkdocs.yml
+        const siteUrl = getMkDocsSiteUrl(repoPath);
+        
+        // Generate local path for serving (e.g., /docs/repo_name/site/)
+        const localPath = `/docs/${repoFolderName}/site/`;
+        
         console.log(`Successfully cloned MkDocs repository to courses/${repoFolderName}`);
-        return { success: true, path: repoPath, folderName: repoFolderName };
+        if (siteUrl) {
+            console.log(`MkDocs site_url: ${siteUrl}`);
+        }
+        console.log(`Local docs path: ${localPath}`);
+        
+        // Build the MkDocs site
+        try {
+            await buildMkDocsSite(repoFolderName, onProgress);
+            if (onProgress) onProgress({ step: 'complete', message: 'Repository cloned and built successfully!', progress: 100 });
+        } catch (buildError) {
+            console.error('Warning: MkDocs build failed:', buildError.message);
+            if (onProgress) onProgress({ step: 'warning', message: 'Cloned successfully but build failed. You may need to build manually.', progress: 100 });
+            // Don't throw - allow course creation to succeed even if build fails
+        }
+        
+        return { success: true, path: repoPath, folderName: repoFolderName, siteUrl, localPath };
 
     } catch (error) {
         console.error('Error cloning git repository:', error.message);
-        throw new Error(`Failed to clone repository: ${error.message}`);
+        if (onProgress) onProgress({ step: 'error', message: error.message, progress: 0 });
+        throw error;
     }
 }
 
@@ -1315,8 +1573,8 @@ const createResponseInDB = (response) => {
 const createCourseInDB = (course) => {
     return new Promise((resolve, reject) => {
         const stmt = db.prepare(`
-            INSERT INTO courses (id, title, description, created_by, created_at, access_code_hash, docs_repo_url, docs_branch)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO courses (id, title, description, created_by, created_at, access_code_hash, docs_repo_url, docs_branch, docs_site_url, docs_local_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         stmt.run(
             [
@@ -1327,7 +1585,9 @@ const createCourseInDB = (course) => {
                 course.created_at, 
                 course.access_code_hash || null,
                 course.docs_repo_url || null,
-                course.docs_branch || 'main'
+                course.docs_branch || 'main',
+                course.docs_site_url || null,
+                course.docs_local_path || null
             ],
             function(err) {
                 if (err) reject(err);
@@ -1361,7 +1621,9 @@ const getCoursesForTeacher = (teacherId) => {
                     requires_access_code: Boolean(row.access_code_hash),
                     docs_repo_url: row.docs_repo_url,
                     docs_branch: row.docs_branch || 'main',
-                    docs_path: row.docs_path
+                    docs_path: row.docs_path,
+                    docs_local_path: row.docs_local_path,
+                    docs_site_url: row.docs_site_url
                 }));
                 resolve(mapped);
             }
@@ -1399,7 +1661,9 @@ const getCoursesForStudent = (studentId) => {
                     requires_access_code: Boolean(row.access_code_hash),
                     docs_repo_url: row.docs_repo_url,
                     docs_branch: row.docs_branch,
-                    docs_path: row.docs_path
+                    docs_path: row.docs_path,
+                    docs_local_path: row.docs_local_path,
+                    docs_site_url: row.docs_site_url
                 }));
                 resolve(mapped);
             }
@@ -2088,18 +2352,38 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
         // Handle git repository cloning if URL is provided
         let repoUrl = (docs_repo_url && String(docs_repo_url).trim()) || null;
         let localRepoFolder = null;
+        let siteUrl = null;
+        let localPath = null;
 
         if (repoUrl && isGitUrl(repoUrl)) {
             try {
-                const cloneResult = await cloneGitRepoAsSubmodule(repoUrl, null);
+                // Create a unique clone ID for this operation
+                const cloneId = `clone_${uuidv4()}`;
+                
+                // Progress callback to emit updates via socket
+                const onProgress = (progress) => {
+                    io.emit('clone-progress', {
+                        cloneId,
+                        userId: req.user.userId,
+                        ...progress
+                    });
+                };
+                
+                const cloneResult = await cloneGitRepoAsSubmodule(repoUrl, null, onProgress);
                 if (cloneResult.success) {
                     localRepoFolder = cloneResult.folderName;
+                    siteUrl = cloneResult.siteUrl;
+                    localPath = cloneResult.localPath;
                     console.log(`Course repository cloned to: courses/${localRepoFolder}`);
+                    if (siteUrl) {
+                        console.log(`Site URL from mkdocs.yml: ${siteUrl}`);
+                    }
+                    console.log(`Local path for serving: ${localPath}`);
                 }
             } catch (cloneError) {
                 console.error('Failed to clone repository:', cloneError.message);
                 return res.status(400).json({ 
-                    error: `Failed to clone repository: ${cloneError.message}. Please ensure it's a valid MkDocs project.` 
+                    error: cloneError.message || 'Failed to clone repository. Please ensure it\'s a public, valid MkDocs project.'
                 });
             }
         }
@@ -2112,7 +2396,9 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             created_at: new Date().toISOString(),
             access_code_hash: accessCodeHash,
             docs_repo_url: repoUrl,
-            docs_branch: (docs_branch && String(docs_branch).trim()) || 'main'
+            docs_branch: (docs_branch && String(docs_branch).trim()) || 'main',
+            docs_site_url: siteUrl,
+            docs_local_path: localPath
         };
 
         const saved = await createCourseInDB(course);
@@ -2126,6 +2412,7 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             requires_access_code: true,
             docs_repo_url: saved.docs_repo_url,
             docs_branch: saved.docs_branch,
+            docs_local_path: saved.docs_local_path,
             local_repo_folder: localRepoFolder
         };
 
@@ -2180,12 +2467,21 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
                     const cloneResult = await cloneGitRepoAsSubmodule(newRepoUrl, null);
                     if (cloneResult.success) {
                         localRepoFolder = cloneResult.folderName;
+                        const siteUrl = cloneResult.siteUrl;
+                        const localPath = cloneResult.localPath;
                         console.log(`Updated course repository cloned to: courses/${localRepoFolder}`);
+                        if (siteUrl) {
+                            console.log(`Site URL from mkdocs.yml: ${siteUrl}`);
+                            updateFields.docs_site_url = siteUrl;
+                        }
+                        if (localPath) {
+                            updateFields.docs_local_path = localPath;
+                        }
                     }
                 } catch (cloneError) {
                     console.error('Failed to clone updated repository:', cloneError.message);
                     return res.status(400).json({ 
-                        error: `Failed to clone repository: ${cloneError.message}. Please ensure it's a valid MkDocs project.` 
+                        error: cloneError.message || 'Failed to clone repository. Please ensure it\'s a public, valid MkDocs project.'
                     });
                 }
             }
@@ -2248,12 +2544,36 @@ app.delete('/api/courses/:courseId', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Course not found or access denied' });
         }
 
+        // Extract repo folder name from docs_local_path or docs_repo_url
+        let repoFolderName = null;
+        if (course.docs_local_path) {
+            // Extract from /docs/repo_name/site/
+            const match = course.docs_local_path.match(/\/docs\/([^\/]+)\//);
+            if (match) {
+                repoFolderName = match[1];
+            }
+        } else if (course.docs_repo_url && isGitUrl(course.docs_repo_url)) {
+            // Extract from git URL
+            repoFolderName = getRepoFolderName(course.docs_repo_url);
+        }
+
+        // Delete from database first
         const result = await deleteCourseInDB(courseId, req.user.userId);
         if (!result.deleted) {
             return res.status(500).json({ error: 'Failed to delete course' });
         }
 
-        res.json({ message: 'Course deleted' });
+        // Clean up git submodule and directory if applicable
+        if (repoFolderName) {
+            console.log(`Cleaning up course repository: ${repoFolderName}`);
+            removeFromGitmodules(repoFolderName);
+            removeCourseDirectory(repoFolderName);
+        }
+
+        res.json({ 
+            message: 'Course deleted',
+            cleaned_up: repoFolderName ? `Removed courses/${repoFolderName}` : null
+        });
     } catch (error) {
         console.error('Delete course error:', error);
         res.status(500).json({ error: 'Internal server error' });

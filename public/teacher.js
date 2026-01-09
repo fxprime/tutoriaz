@@ -460,7 +460,10 @@
             const docsFrame = document.getElementById('teacherDocsFrame');
             const docsPlaceholder = document.getElementById('teacherDocsPlaceholder');
             
-            if (courseData && courseData.docs_repo_url) {
+            // Use docs_local_path if available, otherwise fall back to docs_repo_url
+            const docsPath = courseData.docs_local_path || courseData.docs_repo_url;
+            
+            if (courseData && docsPath) {
                 // Show documentation container
                 if (docsContainer) {
                     docsContainer.classList.remove('hidden');
@@ -472,7 +475,7 @@
                 
                 // Load the documentation in iframe
                 if (docsFrame) {
-                    let docsUrl = courseData.docs_repo_url;
+                    let docsUrl = docsPath;
                     
                     // Check if it's a local path (starts with /)
                     if (docsUrl.startsWith('/')) {
@@ -632,6 +635,25 @@
                 return;
             }
 
+            // Show progress if git URL is provided
+            let progressNotification = null;
+            if (docsRepoUrl && (docsRepoUrl.includes('github.com') || docsRepoUrl.includes('git@'))) {
+                progressNotification = showNotification('Preparing to clone repository...', 'info', 0);
+                
+                // Listen for clone progress
+                socket.on('clone-progress', (data) => {
+                    if (data.userId === currentUser.userId) {
+                        const progressBar = document.querySelector('.notification.info .progress-bar');
+                        const progressText = document.querySelector('.notification.info .notification-text');
+                        
+                        if (progressBar && progressText) {
+                            progressText.textContent = data.message;
+                            progressBar.style.width = `${data.progress || 0}%`;
+                        }
+                    }
+                });
+            }
+
             try {
                 const payload = {
                     title,
@@ -654,6 +676,15 @@
                 });
 
                 const data = await response.json();
+                
+                // Remove progress listener
+                socket.off('clone-progress');
+                
+                // Close progress notification
+                if (progressNotification) {
+                    progressNotification.remove();
+                }
+                
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to create course');
                 }
@@ -675,6 +706,10 @@
                 selectCourse(data.course.id);
             } catch (error) {
                 console.error('Create course error:', error);
+                socket.off('clone-progress');
+                if (progressNotification) {
+                    progressNotification.remove();
+                }
                 showNotification(error.message || 'Failed to create course.', 'error');
             }
         }
@@ -1980,16 +2015,39 @@
         }
 
         // Show notification
-        function showNotification(message, type) {
+        function showNotification(message, type, duration = 3000) {
             const notification = document.createElement('div');
             notification.className = `notification ${type}`;
-            notification.textContent = message;
+            
+            // Create notification content
+            const textSpan = document.createElement('span');
+            textSpan.className = 'notification-text';
+            textSpan.textContent = message;
+            notification.appendChild(textSpan);
+            
+            // Add progress bar if duration is 0 (manual control)
+            if (duration === 0) {
+                const progressBarContainer = document.createElement('div');
+                progressBarContainer.className = 'progress-bar-container';
+                progressBarContainer.style.cssText = 'width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; margin-top: 8px; overflow: hidden;';
+                
+                const progressBar = document.createElement('div');
+                progressBar.className = 'progress-bar';
+                progressBar.style.cssText = 'width: 0%; height: 100%; background: #4CAF50; transition: width 0.3s ease;';
+                
+                progressBarContainer.appendChild(progressBar);
+                notification.appendChild(progressBarContainer);
+            }
             
             document.body.appendChild(notification);
             
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
+            if (duration > 0) {
+                setTimeout(() => {
+                    notification.remove();
+                }, duration);
+            }
+            
+            return notification;
         }
 
         // Load categories
