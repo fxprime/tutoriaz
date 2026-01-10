@@ -2361,38 +2361,65 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
         let localRepoFolder = null;
         let siteUrl = null;
         let localPath = null;
+        let cloneId = null;
 
-        if (repoUrl && isGitUrl(repoUrl)) {
-            try {
-                // Create a unique clone ID for this operation
-                const cloneId = `clone_${uuidv4()}`;
-                
-                // Progress callback to emit updates via socket
-                const onProgress = (progress) => {
+        // Validate git URL first
+        if (repoUrl && !isGitUrl(repoUrl)) {
+            return res.status(400).json({ error: 'Invalid git repository URL' });
+        }
+
+        // Get the expected folder name upfront
+        if (repoUrl) {
+            localRepoFolder = getRepoFolderName(repoUrl);
+            if (!localRepoFolder) {
+                return res.status(400).json({ error: 'Could not extract repository name from URL' });
+            }
+            // Generate expected paths
+            localPath = `/docs/${localRepoFolder}/site/`;
+            // We'll update siteUrl after clone completes
+        }
+
+        // Start git clone in background if URL provided
+        if (repoUrl) {
+            cloneId = `clone_${uuidv4()}`;
+            
+            // Progress callback to emit updates via socket
+            const onProgress = (progress) => {
+                io.emit('clone-progress', {
+                    cloneId,
+                    userId: req.user.userId,
+                    ...progress
+                });
+            };
+            
+            // Clone in background - don't wait for it
+            cloneGitRepoAsSubmodule(repoUrl, null, onProgress)
+                .then(cloneResult => {
+                    if (cloneResult.success) {
+                        console.log(`✓ Course repository cloned to: courses/${cloneResult.folderName}`);
+                        if (cloneResult.siteUrl) {
+                            console.log(`✓ Site URL from mkdocs.yml: ${cloneResult.siteUrl}`);
+                            // Update the course with the actual site URL
+                            db.run('UPDATE courses SET docs_site_url = ? WHERE docs_repo_url = ?', 
+                                [cloneResult.siteUrl, repoUrl],
+                                (err) => {
+                                    if (err) console.error('Failed to update docs_site_url:', err);
+                                }
+                            );
+                        }
+                        onProgress({ step: 'complete', message: 'Repository setup complete!', progress: 100 });
+                    }
+                })
+                .catch(cloneError => {
+                    console.error('Background clone failed:', cloneError.message);
                     io.emit('clone-progress', {
                         cloneId,
                         userId: req.user.userId,
-                        ...progress
+                        step: 'error',
+                        message: `Clone failed: ${cloneError.message}`,
+                        progress: 0
                     });
-                };
-                
-                const cloneResult = await cloneGitRepoAsSubmodule(repoUrl, null, onProgress);
-                if (cloneResult.success) {
-                    localRepoFolder = cloneResult.folderName;
-                    siteUrl = cloneResult.siteUrl;
-                    localPath = cloneResult.localPath;
-                    console.log(`Course repository cloned to: courses/${localRepoFolder}`);
-                    if (siteUrl) {
-                        console.log(`Site URL from mkdocs.yml: ${siteUrl}`);
-                    }
-                    console.log(`Local path for serving: ${localPath}`);
-                }
-            } catch (cloneError) {
-                console.error('Failed to clone repository:', cloneError.message);
-                return res.status(400).json({ 
-                    error: cloneError.message || 'Failed to clone repository. Please ensure it\'s a public, valid MkDocs project.'
                 });
-            }
         }
 
         const course = {
@@ -2420,13 +2447,14 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             docs_repo_url: saved.docs_repo_url,
             docs_branch: saved.docs_branch,
             docs_local_path: saved.docs_local_path,
-            local_repo_folder: localRepoFolder
+            local_repo_folder: localRepoFolder,
+            clone_id: cloneId  // Send back the clone ID so frontend can track progress
         };
 
         res.status(201).json({ 
             course: responseCourse, 
             passkey: trimmedAccessCode,
-            message: localRepoFolder ? `Course created and repository cloned to courses/${localRepoFolder}` : 'Course created successfully'
+            message: localRepoFolder ? `Course created! Cloning repository in background...` : 'Course created successfully'
         });
     } catch (error) {
         console.error('Create course error:', error);
