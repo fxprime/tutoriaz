@@ -90,37 +90,48 @@ fi
 COURSES_DIR="$SCRIPT_DIR/courses"
 VENV_DIR="$COURSES_DIR/venv"
 
-if [ -d "$VENV_DIR" ]; then
-    log_info "Building course documentation..."
-    COURSES_BUILT=0
-    
-    source "$VENV_DIR/bin/activate"
-    
-    for course_dir in "$COURSES_DIR"/*; do
-        if [ -d "$course_dir" ] && [ "$course_dir" != "$VENV_DIR" ] && [ -f "$course_dir/mkdocs.yml" ]; then
-            course_name=$(basename "$course_dir")
-            log_info "Building docs for: $course_name"
-            cd "$course_dir"
+log_info "Building course documentation..."
+COURSES_BUILT=0
+
+# Check each course directory
+for course_dir in "$COURSES_DIR"/*; do
+    if [ -d "$course_dir" ] && [ -f "$course_dir/mkdocs.yml" ]; then
+        course_name=$(basename "$course_dir")
+        log_info "Building docs for: $course_name"
+        cd "$course_dir"
+        
+        # Check if course has its own venv
+        if [ -d "$course_dir/.venv" ]; then
+            source "$course_dir/.venv/bin/activate"
             if mkdocs build --quiet 2>/dev/null; then
                 log_success "Built documentation for $course_name"
                 COURSES_BUILT=$((COURSES_BUILT + 1))
             else
                 log_info "Could not build $course_name (continuing anyway)"
             fi
-            cd "$SCRIPT_DIR"
+            deactivate
+        # Otherwise use shared venv if it exists
+        elif [ -d "$VENV_DIR" ]; then
+            source "$VENV_DIR/bin/activate"
+            if mkdocs build --quiet 2>/dev/null; then
+                log_success "Built documentation for $course_name"
+                COURSES_BUILT=$((COURSES_BUILT + 1))
+            else
+                log_info "Could not build $course_name (continuing anyway)"
+            fi
+            deactivate
+        else
+            log_info "No virtual environment found for $course_name"
         fi
-    done
-    
-    deactivate
-    
-    if [ $COURSES_BUILT -eq 0 ]; then
-        log_info "No courses found to build"
-    else
-        log_success "Built documentation for $COURSES_BUILT course(s)"
+        
+        cd "$SCRIPT_DIR"
     fi
+done
+
+if [ $COURSES_BUILT -eq 0 ]; then
+    log_info "No courses found to build"
 else
-    log_info "Python virtual environment not found. Run './setup.sh' to set up courses."
-    log_info "Server will start without building documentation."
+    log_success "Built documentation for $COURSES_BUILT course(s)"
 fi
 
 echo ""

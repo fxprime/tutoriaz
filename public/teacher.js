@@ -1153,6 +1153,9 @@
                 const multiQuizMonitorBtn = document.getElementById('multiQuizMonitorBtn');
                 if (multiQuizMonitorBtn) multiQuizMonitorBtn.addEventListener('click', openMultiQuizMonitor);
 
+                const viewProgressBtn = document.getElementById('viewProgressBtn');
+                if (viewProgressBtn) viewProgressBtn.addEventListener('click', openCourseProgress);
+
                 const backToTeacherLobbyBtn = document.getElementById('backToTeacherLobbyBtn');
                 if (backToTeacherLobbyBtn) backToTeacherLobbyBtn.addEventListener('click', returnToTeacherLobby);
 
@@ -3228,6 +3231,18 @@
             } else {
                 showNotification('Please allow popups to view the multi-quiz monitor', 'error');
             }
+        }
+
+        // Open course progress dashboard
+        function openCourseProgress() {
+            if (!selectedCourseId) {
+                showNotification('Please select a course first', 'error');
+                return;
+            }
+
+            // Open progress dashboard in new tab/window
+            const progressUrl = `/course-progress.html?courseId=${encodeURIComponent(selectedCourseId)}`;
+            window.open(progressUrl, '_blank');
         }
 
         // ===========================

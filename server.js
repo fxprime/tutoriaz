@@ -136,36 +136,63 @@ function addToGitmodules(repoUrl, repoFolderName, branch = 'main') {
 // Helper function to remove entry from .gitmodules
 function removeFromGitmodules(repoFolderName) {
     try {
-        const gitmodulesPath = path.join(__dirname, '.gitmodules');
-        if (!fs.existsSync(gitmodulesPath)) {
-            return;
+        const submodulePath = `courses/${repoFolderName}`;
+        
+        // Check if we're in a git repository
+        let isGitRepo = false;
+        try {
+            execSync('git rev-parse --git-dir', { cwd: __dirname, stdio: 'ignore' });
+            isGitRepo = true;
+        } catch (e) {
+            console.log('Not in a git repository, will manually remove from .gitmodules');
         }
         
-        const submodulePath = `courses/${repoFolderName}`;
-        let content = fs.readFileSync(gitmodulesPath, 'utf8');
+        if (isGitRepo) {
+            // Use proper git submodule commands
+            try {
+                // Deinitialize the submodule
+                execSync(`git submodule deinit -f "${submodulePath}"`, { 
+                    cwd: __dirname, 
+                    stdio: 'pipe' 
+                });
+                console.log(`Deinitialized submodule: ${submodulePath}`);
+                
+                // Remove from git index and working tree
+                execSync(`git rm -f "${submodulePath}"`, { 
+                    cwd: __dirname, 
+                    stdio: 'pipe' 
+                });
+                console.log(`Removed submodule from git: ${submodulePath}`);
+                
+                // Remove the .git/modules entry
+                const modulesPath = path.join(__dirname, '.git', 'modules', 'courses', repoFolderName);
+                if (fs.existsSync(modulesPath)) {
+                    execSync(`rm -rf "${modulesPath}"`, { cwd: __dirname });
+                    console.log(`Removed .git/modules/${submodulePath}`);
+                }
+            } catch (e) {
+                console.error(`Error removing submodule with git commands: ${e.message}`);
+                // Fall back to manual removal
+                isGitRepo = false;
+            }
+        }
         
-        // Remove the submodule section
-        const regex = new RegExp(`\\[submodule "${submodulePath}"\\][^\\[]*`, 'g');
-        content = content.replace(regex, '');
-        
-        // Clean up extra newlines
-        content = content.replace(/\n{3,}/g, '\n\n').trim() + '\n';
-        
-        fs.writeFileSync(gitmodulesPath, content, 'utf8');
-        console.log(`Removed ${submodulePath} from .gitmodules`);
-        
-        // Try to remove from git cache if in a git repo
-        try {
-            execSync(`git config -f .gitmodules --remove-section "submodule.${submodulePath}"`, { 
-                cwd: __dirname, 
-                stdio: 'ignore' 
-            });
-            execSync(`git rm --cached "${submodulePath}"`, { 
-                cwd: __dirname, 
-                stdio: 'ignore' 
-            });
-        } catch (e) {
-            // Ignore errors - might not be in a git repo
+        // Manual removal if not in git repo or git commands failed
+        if (!isGitRepo) {
+            const gitmodulesPath = path.join(__dirname, '.gitmodules');
+            if (fs.existsSync(gitmodulesPath)) {
+                let content = fs.readFileSync(gitmodulesPath, 'utf8');
+                
+                // Remove the submodule section
+                const regex = new RegExp(`\\[submodule "${submodulePath}"\\][^\\[]*`, 'g');
+                content = content.replace(regex, '');
+                
+                // Clean up extra newlines
+                content = content.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+                
+                fs.writeFileSync(gitmodulesPath, content, 'utf8');
+                console.log(`Manually removed ${submodulePath} from .gitmodules`);
+            }
         }
     } catch (error) {
         console.error('Error removing from .gitmodules:', error.message);
@@ -287,14 +314,28 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
             }
         }
 
-        console.log(`Cloning git repository: ${gitUrl} to courses/${repoFolderName}`);
+        console.log(`Adding git submodule: ${gitUrl} to courses/${repoFolderName}`);
         if (onProgress) onProgress({ step: 'starting', message: 'Initializing repository clone...' });
         
-        // Try direct clone with progress tracking
+        // Check if we're in a git repository
+        let isGitRepo = false;
+        try {
+            execSync('git rev-parse --git-dir', { cwd: __dirname, stdio: 'ignore' });
+            isGitRepo = true;
+        } catch (e) {
+            console.log('Not in a git repository, will use regular clone');
+        }
+        
+        // Use git submodule add for proper submodule setup
         const cloneSuccess = await new Promise((resolve, reject) => {
-            if (onProgress) onProgress({ step: 'cloning', message: 'Cloning repository...', progress: 10 });
+            if (onProgress) onProgress({ step: 'cloning', message: 'Adding as git submodule...', progress: 10 });
             
-            const gitProcess = spawn('git', ['clone', '--depth', '1', '--progress', gitUrl, repoPath], {
+            // Use git submodule add if in a git repo, otherwise fall back to regular clone
+            const gitArgs = isGitRepo 
+                ? ['submodule', 'add', '--progress', gitUrl, `courses/${repoFolderName}`]
+                : ['clone', '--depth', '1', '--progress', gitUrl, repoPath];
+            
+            const gitProcess = spawn('git', gitArgs, {
                 cwd: __dirname
             });
 
@@ -305,7 +346,7 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
                 errorOutput += output;
                 
                 // Parse git progress (git outputs to stderr)
-                if (output.includes('Receiving objects:') || output.includes('Resolving deltas:')) {
+                if (output.includes('Receiving objects:') || output.includes('Resolving deltas:') || output.includes('Cloning into')) {
                     const percentMatch = output.match(/(\d+)%/);
                     if (percentMatch && onProgress) {
                         const percent = parseInt(percentMatch[1]);
@@ -323,7 +364,7 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
                 if (code === 0) {
                     resolve(true);
                 } else {
-                    reject(new Error(`Git clone failed: ${errorOutput}`));
+                    reject(new Error(`Git operation failed: ${errorOutput}`));
                 }
             });
 
@@ -348,6 +389,12 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
         if (!isMkDocsProject(repoPath)) {
             // Cleanup cloned repo
             try {
+                if (isGitRepo) {
+                    // Remove as submodule
+                    execSync(`git submodule deinit -f "courses/${repoFolderName}"`, { cwd: __dirname, stdio: 'ignore' });
+                    execSync(`git rm -f "courses/${repoFolderName}"`, { cwd: __dirname, stdio: 'ignore' });
+                    execSync(`rm -rf ".git/modules/courses/${repoFolderName}"`, { cwd: __dirname, stdio: 'ignore' });
+                }
                 execSync(`rm -rf "${repoPath}"`, { cwd: __dirname, stdio: 'ignore' });
             } catch (cleanupError) {
                 console.error('Error during cleanup:', cleanupError.message);
@@ -357,23 +404,11 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
 
         if (onProgress) onProgress({ step: 'finalizing', message: 'Setting up documentation...', progress: 90 });
 
-        // Add to .gitmodules and initialize as submodule
-        addToGitmodules(gitUrl, repoFolderName, 'main');
-        
-        // Try to register it as a proper submodule with git
-        try {
-            // Check if we're in a git repo
-            execSync('git rev-parse --git-dir', { cwd: __dirname, stdio: 'ignore' });
-            
-            // Initialize the submodule (registers it with git)
-            execSync(`git submodule init "courses/${repoFolderName}"`, { 
-                cwd: __dirname, 
-                stdio: 'ignore' 
-            });
-            console.log(`Registered courses/${repoFolderName} as git submodule`);
-        } catch (e) {
-            // Not a git repo or submodule init failed - that's okay
-            console.log('Could not register as git submodule (continuing anyway)');
+        // If not using git submodule add (not in git repo), manually add to .gitmodules
+        if (!isGitRepo) {
+            addToGitmodules(gitUrl, repoFolderName, 'main');
+        } else {
+            console.log(`Successfully added courses/${repoFolderName} as git submodule`);
         }
 
         // Read site_url from mkdocs.yml
@@ -570,35 +605,72 @@ initializeDatabase();
 
 // Middleware
 // Basic security headers with CSP configuration
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: [
-                "'self'",
-                "https://cdn.jsdelivr.net",
-                "https://cdnjs.cloudflare.com"
-            ],
-            // Removed scriptSrcAttr unsafe-inline - using proper event listeners now
-            styleSrc: [
-                "'self'",
-                "'unsafe-inline'", // Keep for inline styles (less risky than inline scripts)
-                "https://cdnjs.cloudflare.com",
-                "https://fonts.googleapis.com"
-            ],
-            connectSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "https:", "blob:"],
-            fontSrc: [
-                "'self'",
-                "https://cdnjs.cloudflare.com",
-                "https://fonts.gstatic.com"
-            ],
-            objectSrc: ["'none'"],
-            mediaSrc: ["'self'"],
-            frameSrc: ["'self'", "https://tutoriaz.modulemore.com", "https://*.modulemore.com"]
-        }
+// Apply stricter CSP for main app, relaxed for documentation
+app.use((req, res, next) => {
+    // For documentation paths, use relaxed CSP to allow MkDocs inline scripts
+    if (req.path.startsWith('/docs/')) {
+        helmet({
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: [
+                        "'self'",
+                        "'unsafe-inline'", // Allow inline scripts for MkDocs
+                        "https://cdn.jsdelivr.net",
+                        "https://cdnjs.cloudflare.com",
+                        "https://unpkg.com" // Allow unpkg for mermaid and other dependencies
+                    ],
+                    styleSrc: [
+                        "'self'",
+                        "'unsafe-inline'",
+                        "https://cdnjs.cloudflare.com",
+                        "https://fonts.googleapis.com"
+                    ],
+                    connectSrc: ["'self'"],
+                    imgSrc: ["'self'", "data:", "https:", "blob:"],
+                    fontSrc: [
+                        "'self'",
+                        "https://cdnjs.cloudflare.com",
+                        "https://fonts.gstatic.com"
+                    ],
+                    objectSrc: ["'none'"],
+                    mediaSrc: ["'self'"],
+                    frameSrc: ["'self'", "https://tutoriaz.modulemore.com", "https://*.modulemore.com"]
+                }
+            }
+        })(req, res, next);
+    } else {
+        // Stricter CSP for main application
+        helmet({
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: [
+                        "'self'",
+                        "https://cdn.jsdelivr.net",
+                        "https://cdnjs.cloudflare.com"
+                    ],
+                    styleSrc: [
+                        "'self'",
+                        "'unsafe-inline'", // Keep for inline styles (less risky than inline scripts)
+                        "https://cdnjs.cloudflare.com",
+                        "https://fonts.googleapis.com"
+                    ],
+                    connectSrc: ["'self'"],
+                    imgSrc: ["'self'", "data:", "https:", "blob:"],
+                    fontSrc: [
+                        "'self'",
+                        "https://cdnjs.cloudflare.com",
+                        "https://fonts.gstatic.com"
+                    ],
+                    objectSrc: ["'none'"],
+                    mediaSrc: ["'self'"],
+                    frameSrc: ["'self'", "https://tutoriaz.modulemore.com", "https://*.modulemore.com"]
+                }
+            }
+        })(req, res, next);
     }
-}));
+});
 // CORS - keep default permissive for now (adjust in production)
 app.use(cors());
 // Limit JSON body size to mitigate large payload abuse
@@ -6864,6 +6936,618 @@ app.delete('/api/assignments/:assignmentId', authenticateToken, async (req, res)
 });
 
 // ==================== END ASSIGNMENT ROUTES ====================
+
+// ==================== READING PROGRESS TRACKING ROUTES ====================
+
+/**
+ * POST /api/progress
+ * Record reading progress for a section
+ * Now supports chapter-based progress structure
+ */
+app.post('/api/progress', async (req, res) => {
+    try {
+        const { 
+            userId, 
+            courseId, 
+            sessionId, 
+            pageUrl, 
+            progress, 
+            trigger,
+            // Legacy format support
+            sectionId, 
+            sectionTitle, 
+            completedSections = [] 
+        } = req.body;
+
+        if (!userId || !courseId) {
+            return res.status(400).json({ error: 'Missing required fields: userId, courseId' });
+        }
+
+        const now = new Date().toISOString();
+
+        // Handle new chapter-based progress format
+        if (progress && progress.chapters) {
+            console.log(`📊 Progress update for user ${userId} in course ${courseId}:`);
+            console.log(`   Overall: ${progress.overall.completed}/${progress.overall.total} (${progress.overall.percentage}%)`);
+
+            // Store chapter-based progress
+            const progressId = uuidv4();
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO reading_progress 
+                    (id, user_id, course_id, section_id, section_title, page_url, completed_at, session_id, progress_data)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        progressId, 
+                        userId, 
+                        courseId, 
+                        trigger ? trigger.sectionId : 'summary',
+                        trigger ? trigger.sectionTitle : 'Progress Update',
+                        pageUrl || '', 
+                        now, 
+                        sessionId || null,
+                        JSON.stringify(progress)
+                    ],
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+
+            // Auto-register all sections from chapters
+            const allSections = [];
+            Object.values(progress.chapters).forEach(chapter => {
+                chapter.sections.forEach(section => {
+                    allSections.push({
+                        sectionId: section.sectionId,
+                        title: section.title,
+                        chapterId: chapter.chapterId
+                    });
+                });
+            });
+
+            for (const section of allSections) {
+                await new Promise((resolve, reject) => {
+                    db.run(
+                        `INSERT OR IGNORE INTO course_sections (id, course_id, section_id, section_title, chapter_id)
+                        VALUES (?, ?, ?, ?, ?)`,
+                        [uuidv4(), courseId, section.sectionId, section.title, section.chapterId],
+                        function(err) {
+                            if (err) reject(err);
+                            else resolve();
+                        }
+                    );
+                });
+            }
+
+            // Update course progress summary with chapter details
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT INTO course_progress_summary 
+                    (id, user_id, course_id, total_sections, completed_sections, progress_percentage, last_accessed_at, chapter_progress)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, course_id) DO UPDATE SET 
+                        total_sections = excluded.total_sections,
+                        completed_sections = excluded.completed_sections,
+                        progress_percentage = excluded.progress_percentage,
+                        last_accessed_at = excluded.last_accessed_at,
+                        chapter_progress = excluded.chapter_progress`,
+                    [
+                        uuidv4(), 
+                        userId, 
+                        courseId, 
+                        progress.overall.total,
+                        progress.overall.completed, 
+                        progress.overall.percentage, 
+                        now,
+                        JSON.stringify(progress.chapters)
+                    ],
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+
+            res.json({
+                success: true,
+                progress: {
+                    overall: progress.overall,
+                    chaptersCount: Object.keys(progress.chapters).length
+                }
+            });
+
+        } else {
+            // Legacy format support - handle old single-section updates
+            if (!sectionId) {
+                return res.status(400).json({ error: 'Missing sectionId in legacy format' });
+            }
+
+            const progressId = uuidv4();
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO reading_progress 
+                    (id, user_id, course_id, section_id, section_title, page_url, completed_at, session_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [progressId, userId, courseId, sectionId, sectionTitle || '', pageUrl || '', now, sessionId || null],
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+
+            // Auto-register sections
+            if (completedSections.length > 0) {
+                for (const secId of completedSections) {
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            `INSERT OR IGNORE INTO course_sections (id, course_id, section_id, section_title)
+                            VALUES (?, ?, ?, ?)`,
+                            [uuidv4(), courseId, secId, ''],
+                            function(err) {
+                                if (err) reject(err);
+                                else resolve();
+                            }
+                        );
+                    });
+                }
+            }
+
+            // Calculate progress percentage
+            const progressData = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT 
+                        (SELECT COUNT(DISTINCT section_id) FROM course_sections WHERE course_id = ?) as total_sections,
+                        (SELECT COUNT(*) FROM reading_progress WHERE user_id = ? AND course_id = ?) as completed_sections`,
+                    [courseId, userId, courseId],
+                    (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows[0] || { total_sections: 0, completed_sections: 0 });
+                    }
+                );
+            });
+
+            const totalSections = progressData.total_sections || completedSections.length;
+            const completedCount = progressData.completed_sections;
+            const progressPercentage = totalSections > 0 ? (completedCount / totalSections) * 100 : 0;
+
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT INTO course_progress_summary 
+                    (id, user_id, course_id, total_sections, completed_sections, progress_percentage, last_accessed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(user_id, course_id) DO UPDATE SET 
+                        total_sections = excluded.total_sections,
+                        completed_sections = excluded.completed_sections,
+                        progress_percentage = excluded.progress_percentage,
+                        last_accessed_at = excluded.last_accessed_at`,
+                    [uuidv4(), userId, courseId, totalSections, completedCount, progressPercentage, now],
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve();
+                    }
+                );
+            });
+
+            res.json({
+                success: true,
+                progressPercentage: progressPercentage
+            });
+        }
+
+    } catch (error) {
+        console.error('Progress tracking error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/progress/:courseId/:userId
+ * Get reading progress for a specific user and course
+ */
+app.get('/api/progress/:courseId/:userId', async (req, res) => {
+    try {
+        const { courseId, userId } = req.params;
+
+        // Get progress summary
+        const summary = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT * FROM course_progress_summary 
+                WHERE user_id = ? AND course_id = ?`,
+                [userId, courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row || { 
+                        total_sections: 0, 
+                        completed_sections: 0, 
+                        progress_percentage: 0 
+                    });
+                }
+            );
+        });
+
+        // Get completed sections
+        const sections = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT section_id, section_title, completed_at, time_spent_seconds 
+                FROM reading_progress 
+                WHERE user_id = ? AND course_id = ?
+                ORDER BY completed_at DESC`,
+                [userId, courseId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        res.json({
+            success: true,
+            summary,
+            completedSections: sections
+        });
+    } catch (error) {
+        console.error('Get progress error:', error);
+        res.status(500).json({ error: 'Failed to retrieve progress' });
+    }
+});
+
+/**
+ * GET /api/courses/:courseId/progress
+ * Get all students' progress for a course (teacher view)
+ * Similar to Udemy's teacher dashboard
+ */
+app.get('/api/courses/:courseId/progress', authenticateToken, async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.userId;
+
+        // Verify user is teacher or owner of the course
+        const course = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT created_by FROM courses WHERE id = ?`,
+                [courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!course) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+
+        if (req.user.role !== 'teacher' && course.created_by !== userId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Get all enrolled students with their progress
+        const studentsProgress = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT 
+                    u.id as user_id,
+                    u.username,
+                    u.display_name,
+                    ce.enrolled_at,
+                    COALESCE(cps.total_sections, 0) as total_sections,
+                    COALESCE(cps.completed_sections, 0) as completed_sections,
+                    COALESCE(cps.progress_percentage, 0) as progress_percentage,
+                    cps.last_accessed_at,
+                    cps.first_accessed_at,
+                    cps.chapter_progress,
+                    (SELECT COUNT(*) FROM reading_sessions WHERE user_id = u.id AND course_id = ?) as total_sessions,
+                    (SELECT SUM(total_time_seconds) FROM reading_sessions WHERE user_id = u.id AND course_id = ?) as total_time_spent
+                FROM course_enrollments ce
+                JOIN users u ON ce.student_id = u.id
+                LEFT JOIN course_progress_summary cps ON cps.user_id = u.id AND cps.course_id = ce.course_id
+                WHERE ce.course_id = ?
+                ORDER BY cps.progress_percentage DESC, u.display_name ASC`,
+                [courseId, courseId, courseId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        // Get course sections count
+        const sectionsCount = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT COUNT(*) as count FROM course_sections WHERE course_id = ?`,
+                [courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row?.count || 0);
+                }
+            );
+        });
+
+        res.json({
+            success: true,
+            courseId,
+            totalSections: sectionsCount,
+            students: studentsProgress.map(s => {
+                let chapterProgress = null;
+                try {
+                    chapterProgress = s.chapter_progress ? JSON.parse(s.chapter_progress) : null;
+                } catch (e) {
+                    console.error('Error parsing chapter progress:', e);
+                }
+
+                // Always use the actual section count from course_sections table
+                // to ensure consistency between overview and detail views
+                const actualTotalSections = sectionsCount;
+                const completedSections = s.completed_sections;
+                // Recalculate percentage based on actual section count
+                const actualPercentage = actualTotalSections > 0 
+                    ? Math.round((completedSections / actualTotalSections) * 100 * 100) / 100
+                    : 0;
+
+                return {
+                    userId: s.user_id,
+                    username: s.username,
+                    displayName: s.display_name,
+                    enrolledAt: s.enrolled_at,
+                    progress: {
+                        totalSections: actualTotalSections,
+                        completedSections: completedSections,
+                        percentage: actualPercentage,
+                        lastAccessedAt: s.last_accessed_at,
+                        firstAccessedAt: s.first_accessed_at,
+                        totalSessions: s.total_sessions || 0,
+                        totalTimeSpent: s.total_time_spent || 0,
+                        chapters: chapterProgress
+                    }
+                };
+            })
+        });
+    } catch (error) {
+        console.error('Get course progress error:', error);
+        res.status(500).json({ error: 'Failed to retrieve course progress' });
+    }
+});
+
+/**
+ * GET /api/courses/:courseId/progress/:userId/details
+ * Get detailed progress for a specific student (teacher view)
+ */
+app.get('/api/courses/:courseId/progress/:userId/details', authenticateToken, async (req, res) => {
+    try {
+        const { courseId, userId: studentId } = req.params;
+        const requesterId = req.user.userId;
+
+        // Verify requester is teacher or the student themselves
+        if (req.user.role !== 'teacher' && requesterId !== studentId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Get student info
+        const student = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT id, username, display_name FROM users WHERE id = ?`,
+                [studentId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!student) {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Get progress summary
+        const summary = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT * FROM course_progress_summary 
+                WHERE user_id = ? AND course_id = ?`,
+                [studentId, courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        // Get all sections with completion status
+        const sections = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT 
+                    cs.section_id,
+                    cs.section_title,
+                    cs.page_url,
+                    cs.section_order,
+                    cs.is_quiz_trigger,
+                    rp.completed_at,
+                    rp.time_spent_seconds,
+                    CASE WHEN rp.id IS NOT NULL THEN 1 ELSE 0 END as is_completed
+                FROM course_sections cs
+                LEFT JOIN reading_progress rp ON 
+                    rp.section_id = cs.section_id AND 
+                    rp.user_id = ? AND 
+                    rp.course_id = cs.course_id
+                WHERE cs.course_id = ?
+                ORDER BY cs.section_order ASC, cs.section_id ASC`,
+                [studentId, courseId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        // Get reading sessions
+        const sessions = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT * FROM reading_sessions 
+                WHERE user_id = ? AND course_id = ?
+                ORDER BY started_at DESC
+                LIMIT 20`,
+                [studentId, courseId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        res.json({
+            success: true,
+            student: {
+                id: student.id,
+                username: student.username,
+                displayName: student.display_name
+            },
+            summary: summary || {
+                total_sections: sections.length,
+                completed_sections: 0,
+                progress_percentage: 0
+            },
+            sections: sections,
+            recentSessions: sessions
+        });
+    } catch (error) {
+        console.error('Get student progress details error:', error);
+        res.status(500).json({ error: 'Failed to retrieve progress details' });
+    }
+});
+
+/**
+ * POST /api/courses/:courseId/sections
+ * Register course sections (called when course structure is initialized)
+ */
+app.post('/api/courses/:courseId/sections', authenticateToken, async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const { sections } = req.body;
+
+        if (!Array.isArray(sections)) {
+            return res.status(400).json({ error: 'Sections must be an array' });
+        }
+
+        // Verify user has access to course
+        const course = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT created_by FROM courses WHERE id = ?`,
+                [courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!course) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+
+        // Insert or update sections
+        const stmt = db.prepare(
+            `INSERT INTO course_sections 
+            (id, course_id, section_id, section_title, page_url, section_order, parent_section, is_quiz_trigger, quiz_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(course_id, section_id) DO UPDATE SET 
+                section_title = excluded.section_title,
+                page_url = excluded.page_url,
+                section_order = excluded.section_order,
+                parent_section = excluded.parent_section,
+                is_quiz_trigger = excluded.is_quiz_trigger,
+                quiz_id = excluded.quiz_id`
+        );
+
+        let insertedCount = 0;
+        for (const section of sections) {
+            const sectionDbId = uuidv4();
+            stmt.run(
+                sectionDbId,
+                courseId,
+                section.sectionId,
+                section.title || '',
+                section.pageUrl || '',
+                section.order || 0,
+                section.parentSection || null,
+                section.isQuizTrigger ? 1 : 0,
+                section.quizId || null,
+                (err) => {
+                    if (!err) insertedCount++;
+                }
+            );
+        }
+
+        stmt.finalize(() => {
+            res.json({
+                success: true,
+                message: `Registered ${insertedCount} sections`,
+                sectionsCount: insertedCount
+            });
+        });
+    } catch (error) {
+        console.error('Register sections error:', error);
+        res.status(500).json({ error: 'Failed to register sections' });
+    }
+});
+
+/**
+ * GET /api/my-progress
+ * Get current user's progress across all courses (student view)
+ */
+app.get('/api/my-progress', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        // Get progress for all enrolled courses
+        const coursesProgress = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT 
+                    c.id as course_id,
+                    c.title as course_title,
+                    c.description,
+                    ce.enrolled_at,
+                    COALESCE(cps.total_sections, 0) as total_sections,
+                    COALESCE(cps.completed_sections, 0) as completed_sections,
+                    COALESCE(cps.progress_percentage, 0) as progress_percentage,
+                    cps.last_accessed_at,
+                    cps.first_accessed_at
+                FROM course_enrollments ce
+                JOIN courses c ON ce.course_id = c.id
+                LEFT JOIN course_progress_summary cps ON cps.user_id = ce.student_id AND cps.course_id = ce.course_id
+                WHERE ce.student_id = ?
+                ORDER BY cps.last_accessed_at DESC NULLS LAST, ce.enrolled_at DESC`,
+                [userId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        res.json({
+            success: true,
+            courses: coursesProgress.map(c => ({
+                courseId: c.course_id,
+                title: c.course_title,
+                description: c.description,
+                enrolledAt: c.enrolled_at,
+                progress: {
+                    totalSections: c.total_sections,
+                    completedSections: c.completed_sections,
+                    percentage: Math.round(c.progress_percentage * 100) / 100,
+                    lastAccessedAt: c.last_accessed_at,
+                    firstAccessedAt: c.first_accessed_at
+                }
+            }))
+        });
+    } catch (error) {
+        console.error('Get my progress error:', error);
+        res.status(500).json({ error: 'Failed to retrieve progress' });
+    }
+});
+
+// ==================== END READING PROGRESS TRACKING ROUTES ====================
 
 // Static file serving
 app.get('/', (req, res) => {

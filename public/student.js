@@ -708,6 +708,23 @@
                         console.log('Treating as relative path:', docsUrl);
                     }
                     
+                    // Append user_id and course_id to the docs URL for progress tracking
+                    const urlSeparator = docsUrl.includes('?') ? '&' : '?';
+                    
+                    // Get user ID from stored user data
+                    let userId = 'anonymous';
+                    try {
+                        const userData = localStorage.getItem('user');
+                        if (userData) {
+                            const userObj = JSON.parse(userData);
+                            userId = userObj.id || 'anonymous';
+                        }
+                    } catch (e) {
+                        console.error('Error getting user ID:', e);
+                    }
+                    
+                    docsUrl = `${docsUrl}${urlSeparator}user_id=${encodeURIComponent(userId)}&course_id=${encodeURIComponent(courseData.id)}`;
+                    
                     docsFrame.src = docsUrl;
                     console.log('Loading docs from:', docsUrl);
                 }
@@ -736,7 +753,36 @@
         function openDocsNewTab() {
             const docsFrame = document.getElementById('courseDocsFrame');
             if (docsFrame.src) {
-                window.open(docsFrame.src, '_blank');
+                // Get current course information
+                const currentCourse = studentCourses.find(c => c.id === selectedCourseId);
+                
+                // Get user ID from stored user data
+                let userId = 'anonymous';
+                try {
+                    const userData = localStorage.getItem('user');
+                    if (userData) {
+                        const user = JSON.parse(userData);
+                        userId = user.id || 'anonymous';
+                    }
+                } catch (e) {
+                    console.error('Error getting user ID:', e);
+                }
+                
+                // Extract the original docs URL (without query parameters)
+                const iframeUrl = new URL(docsFrame.src);
+                const baseDocsUrl = `${iframeUrl.origin}${iframeUrl.pathname}`;
+                
+                // Create URL for the docs viewer wrapper
+                const viewerUrl = new URL('/docs-viewer.html', window.location.origin);
+                viewerUrl.searchParams.set('url', baseDocsUrl);
+                viewerUrl.searchParams.set('user_id', userId);
+                viewerUrl.searchParams.set('course_id', selectedCourseId || 'unknown');
+                
+                if (currentCourse && currentCourse.title) {
+                    viewerUrl.searchParams.set('title', currentCourse.title);
+                }
+                
+                window.open(viewerUrl.toString(), '_blank');
             }
         }
 

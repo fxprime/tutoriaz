@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Progress - Tutoriaz</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .header-actions {
+            margin-top: 16px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .courses-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .course-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .course-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .course-header {
+            margin-bottom: 16px;
+        }
+
+        .course-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .course-description {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .progress-section {
+            margin: 20px 0;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .progress-percentage {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 12px;
+            background: #f0f0f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+            border-radius: 6px;
+        }
+
+        .course-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stat {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .course-meta {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #f0f0f0;
+            font-size: 13px;
+            color: #999;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+
+        .badge-success {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .badge-warning {
+            background: #fff3e0;
+            color: #ff9800;
+        }
+
+        .badge-info {
+            background: #e3f2fd;
+            color: #2196f3;
+        }
+
+        .empty-state {
+            background: white;
+            border-radius: 12px;
+            padding: 60px 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .achievement-banner {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 4px 6px rgba(255, 215, 0, 0.3);
+        }
+
+        .achievement-icon {
+            font-size: 48px;
+        }
+
+        .achievement-text h3 {
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .achievement-text p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .courses-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .course-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📈 My Learning Progress</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="goBack()">← Back to Dashboard</button>
+            </div>
+        </div>
+
+        <div id="achievement-container"></div>
+
+        <div id="content-container">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading your progress...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = null;
+        let coursesData = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Get token from localStorage
+            token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/';
+                return;
+            }
+
+            await loadProgress();
+        });
+
+        async function loadProgress() {
+            try {
+                const response = await fetch('/api/my-progress', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load progress');
+                }
+
+                const data = await response.json();
+                coursesData = data.courses || [];
+
+                renderCourses(coursesData);
+                checkAchievements(coursesData);
+            } catch (error) {
+                console.error('Error loading progress:', error);
+                document.getElementById('content-container').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <p>Error loading your progress</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderCourses(courses) {
+            if (courses.length === 0) {
+                document.getElementById('content-container').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📚</div>
+                        <p>You haven't enrolled in any courses yet</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = `
+                <div class="courses-grid">
+                    ${courses.map(course => `
+                        <div class="course-card" onclick="viewCourseDetails('${course.courseId}')">
+                            <div class="course-header">
+                                <h2 class="course-title">${escapeHtml(course.title)}</h2>
+                                ${course.description ? `<p class="course-description">${escapeHtml(course.description)}</p>` : ''}
+                            </div>
+
+                            <div class="progress-section">
+                                <div class="progress-label">
+                                    <span>Overall Progress</span>
+                                    <span class="progress-percentage">${Math.round(course.progress.percentage)}%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar" style="width: ${course.progress.percentage}%"></div>
+                                </div>
+                            </div>
+
+                            <div class="course-stats">
+                                <div class="stat">
+                                    <div class="stat-label">Completed</div>
+                                    <div class="stat-value">${course.progress.completedSections}/${course.progress.totalSections}</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-label">Status</div>
+                                    <div class="stat-value">${getStatusBadge(course.progress.percentage)}</div>
+                                </div>
+                            </div>
+
+                            <div class="course-meta">
+                                ${course.progress.lastAccessedAt 
+                                    ? `Last accessed: ${formatDate(course.progress.lastAccessedAt)}`
+                                    : 'Not started yet'}
+                            </div>
+
+                            ${course.progress.percentage >= 100 
+                                ? '<span class="badge badge-success">✓ Completed</span>'
+                                : course.progress.percentage > 0 
+                                    ? '<span class="badge badge-warning">📖 In Progress</span>'
+                                    : '<span class="badge badge-info">🆕 Not Started</span>'}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('content-container').innerHTML = html;
+        }
+
+        function checkAchievements(courses) {
+            const completedCourses = courses.filter(c => c.progress.percentage >= 100).length;
+            
+            if (completedCourses > 0) {
+                const totalCourses = courses.length;
+                const achievementHtml = `
+                    <div class="achievement-banner">
+                        <div class="achievement-icon">🏆</div>
+                        <div class="achievement-text">
+                            <h3>Great Progress!</h3>
+                            <p>You've completed ${completedCourses} out of ${totalCourses} courses. Keep it up!</p>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('achievement-container').innerHTML = achievementHtml;
+            }
+        }
+
+        function getStatusBadge(percentage) {
+            if (percentage >= 100) return '✓ Done';
+            if (percentage >= 75) return '🔥 Almost';
+            if (percentage >= 50) return '⚡ Half Way';
+            if (percentage >= 25) return '📚 Started';
+            if (percentage > 0) return '🆕 Begun';
+            return '⏸️ New';
+        }
+
+        function viewCourseDetails(courseId) {
+            // Redirect to the course documentation or quiz page
+            window.location.href = `/student.html`;
+        }
+
+        function goBack() {
+            window.location.href = '/student.html';
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) {
+                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                if (diffHours === 0) {
+                    const diffMins = Math.floor(diffMs / (1000 * 60));
+                    return diffMins <= 1 ? 'Just now' : `${diffMins} minutes ago`;
+                }
+                return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+            } else if (diffDays === 1) {
+                return 'Yesterday';
+            } else if (diffDays < 7) {
+                return `${diffDays} days ago`;
+            } else {
+                return date.toLocaleDateString();
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
