@@ -7306,6 +7306,8 @@ app.get('/api/courses/:courseId/progress', authenticateToken, async (req, res) =
         });
     } catch (error) {
         console.error('Get course progress error:', error);
+        console.error('Error stack:', error.stack);
+        console.error('Course ID:', courseId);
         res.status(500).json({ error: 'Failed to retrieve course progress' });
     }
 });
