@@ -594,6 +594,71 @@ function initializeDatabase() {
             )
         `);
 
+        db.run(`
+            CREATE TABLE IF NOT EXISTS reading_progress (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                section_id TEXT NOT NULL,
+                section_title TEXT,
+                page_url TEXT,
+                completed_at TEXT NOT NULL,
+                session_id TEXT,
+                time_spent_seconds INTEGER DEFAULT 0,
+                progress_data TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            )
+        `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS course_progress_summary (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                total_sections INTEGER DEFAULT 0,
+                completed_sections INTEGER DEFAULT 0,
+                progress_percentage REAL DEFAULT 0,
+                first_accessed_at TEXT,
+                last_accessed_at TEXT,
+                chapter_progress TEXT,
+                UNIQUE(user_id, course_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            )
+        `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS course_sections (
+                id TEXT PRIMARY KEY,
+                course_id TEXT NOT NULL,
+                section_id TEXT NOT NULL,
+                section_title TEXT,
+                page_url TEXT,
+                section_order INTEGER DEFAULT 0,
+                parent_section TEXT,
+                chapter_id TEXT,
+                is_quiz_trigger INTEGER DEFAULT 0,
+                quiz_id TEXT,
+                UNIQUE(course_id, section_id),
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            )
+        `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS reading_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                total_time_seconds INTEGER DEFAULT 0,
+                pages_visited TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            )
+        `);
+
         db.run(`CREATE INDEX IF NOT EXISTS idx_assignments_course ON assignments(course_id)`);
         db.run(`CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status)`);
         db.run(`CREATE INDEX IF NOT EXISTS idx_assignment_submissions_assignment ON assignment_submissions(assignment_id)`);
@@ -7200,10 +7265,10 @@ app.get('/api/progress/:courseId/:userId', async (req, res) => {
  * Similar to Udemy's teacher dashboard
  */
 app.get('/api/courses/:courseId/progress', authenticateToken, async (req, res) => {
-    try {
-        const { courseId } = req.params;
-        const userId = req.user.userId;
+    const { courseId } = req.params;
+    const userId = req.user.userId;
 
+    try {
         // Verify user is teacher or owner of the course
         const course = await new Promise((resolve, reject) => {
             db.get(
