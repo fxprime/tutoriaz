@@ -86,16 +86,16 @@ function getMkDocsSiteUrl(dirPath) {
     try {
         const mkdocsYmlPath = path.join(dirPath, 'mkdocs.yml');
         const mkdocsYamlPath = path.join(dirPath, 'mkdocs.yaml');
-        
+
         let configPath = null;
         if (fs.existsSync(mkdocsYmlPath)) {
             configPath = mkdocsYmlPath;
         } else if (fs.existsSync(mkdocsYamlPath)) {
             configPath = mkdocsYamlPath;
         }
-        
+
         if (!configPath) return null;
-        
+
         const content = fs.readFileSync(configPath, 'utf8');
         // Simple regex to extract site_url (not full YAML parsing)
         const match = content.match(/^site_url:\s*(.+)$/m);
@@ -114,7 +114,7 @@ function addToGitmodules(repoUrl, repoFolderName, branch = 'main') {
     try {
         const gitmodulesPath = path.join(__dirname, '.gitmodules');
         const submodulePath = `courses/${repoFolderName}`;
-        
+
         // Check if entry already exists
         if (fs.existsSync(gitmodulesPath)) {
             const content = fs.readFileSync(gitmodulesPath, 'utf8');
@@ -123,7 +123,7 @@ function addToGitmodules(repoUrl, repoFolderName, branch = 'main') {
                 return;
             }
         }
-        
+
         // Add new entry
         const entry = `\n[submodule "${submodulePath}"]\n\tpath = ${submodulePath}\n\turl = ${repoUrl}\n\tbranch = ${branch}\n`;
         fs.appendFileSync(gitmodulesPath, entry, 'utf8');
@@ -137,7 +137,7 @@ function addToGitmodules(repoUrl, repoFolderName, branch = 'main') {
 function removeFromGitmodules(repoFolderName) {
     try {
         const submodulePath = `courses/${repoFolderName}`;
-        
+
         // Check if we're in a git repository
         let isGitRepo = false;
         try {
@@ -146,24 +146,24 @@ function removeFromGitmodules(repoFolderName) {
         } catch (e) {
             console.log('Not in a git repository, will manually remove from .gitmodules');
         }
-        
+
         if (isGitRepo) {
             // Use proper git submodule commands
             try {
                 // Deinitialize the submodule
-                execSync(`git submodule deinit -f "${submodulePath}"`, { 
-                    cwd: __dirname, 
-                    stdio: 'pipe' 
+                execSync(`git submodule deinit -f "${submodulePath}"`, {
+                    cwd: __dirname,
+                    stdio: 'pipe'
                 });
                 console.log(`Deinitialized submodule: ${submodulePath}`);
-                
+
                 // Remove from git index and working tree
-                execSync(`git rm -f "${submodulePath}"`, { 
-                    cwd: __dirname, 
-                    stdio: 'pipe' 
+                execSync(`git rm -f "${submodulePath}"`, {
+                    cwd: __dirname,
+                    stdio: 'pipe'
                 });
                 console.log(`Removed submodule from git: ${submodulePath}`);
-                
+
                 // Remove the .git/modules entry
                 const modulesPath = path.join(__dirname, '.git', 'modules', 'courses', repoFolderName);
                 if (fs.existsSync(modulesPath)) {
@@ -176,20 +176,20 @@ function removeFromGitmodules(repoFolderName) {
                 isGitRepo = false;
             }
         }
-        
+
         // Manual removal if not in git repo or git commands failed
         if (!isGitRepo) {
             const gitmodulesPath = path.join(__dirname, '.gitmodules');
             if (fs.existsSync(gitmodulesPath)) {
                 let content = fs.readFileSync(gitmodulesPath, 'utf8');
-                
+
                 // Remove the submodule section
                 const regex = new RegExp(`\\[submodule "${submodulePath}"\\][^\\[]*`, 'g');
                 content = content.replace(regex, '');
-                
+
                 // Clean up extra newlines
                 content = content.replace(/\n{3,}/g, '\n\n').trim() + '\n';
-                
+
                 fs.writeFileSync(gitmodulesPath, content, 'utf8');
                 console.log(`Manually removed ${submodulePath} from .gitmodules`);
             }
@@ -220,48 +220,48 @@ async function buildMkDocsSite(repoFolderName, onProgress = null) {
     try {
         const coursePath = path.join(__dirname, 'courses', repoFolderName);
         const venvPath = path.join(__dirname, 'courses', 'venv');
-        
+
         // Check if course directory exists
         if (!fs.existsSync(coursePath)) {
             throw new Error(`Course directory not found: ${repoFolderName}`);
         }
-        
+
         // Check if mkdocs.yml exists
         if (!isMkDocsProject(coursePath)) {
             throw new Error('Not a valid MkDocs project');
         }
-        
+
         // Check if virtual environment exists
         if (!fs.existsSync(venvPath)) {
             throw new Error('Python virtual environment not found. Run setup.sh first.');
         }
-        
+
         console.log(`Building MkDocs site for: ${repoFolderName}`);
         if (onProgress) onProgress({ step: 'building', message: 'Building documentation site...', progress: 95 });
-        
+
         return new Promise((resolve, reject) => {
             // Run mkdocs build using the virtual environment
             const activateCmd = `source "${venvPath}/bin/activate"`;
             const buildCmd = `cd "${coursePath}" && mkdocs build --clean`;
             const fullCmd = `${activateCmd} && ${buildCmd}`;
-            
+
             const buildProcess = spawn('bash', ['-c', fullCmd], {
                 cwd: __dirname
             });
-            
+
             let stdout = '';
             let stderr = '';
-            
+
             buildProcess.stdout.on('data', (data) => {
                 stdout += data.toString();
                 console.log(`MkDocs build: ${data.toString().trim()}`);
             });
-            
+
             buildProcess.stderr.on('data', (data) => {
                 stderr += data.toString();
                 console.error(`MkDocs build error: ${data.toString().trim()}`);
             });
-            
+
             buildProcess.on('close', (code) => {
                 if (code === 0) {
                     console.log(`Successfully built MkDocs site for ${repoFolderName}`);
@@ -270,11 +270,11 @@ async function buildMkDocsSite(repoFolderName, onProgress = null) {
                     reject(new Error(`MkDocs build failed with code ${code}: ${stderr}`));
                 }
             });
-            
+
             buildProcess.on('error', (err) => {
                 reject(new Error(`Failed to run mkdocs build: ${err.message}`));
             });
-            
+
             // Timeout after 120 seconds
             setTimeout(() => {
                 buildProcess.kill();
@@ -291,7 +291,7 @@ async function buildMkDocsSite(repoFolderName, onProgress = null) {
 async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
     try {
         const coursesDir = path.join(__dirname, 'courses');
-        
+
         // Ensure courses directory exists
         if (!fs.existsSync(coursesDir)) {
             fs.mkdirSync(coursesDir, { recursive: true });
@@ -316,7 +316,7 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
 
         console.log(`Adding git submodule: ${gitUrl} to courses/${repoFolderName}`);
         if (onProgress) onProgress({ step: 'starting', message: 'Initializing repository clone...' });
-        
+
         // Check if we're in a git repository
         let isGitRepo = false;
         try {
@@ -325,34 +325,34 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
         } catch (e) {
             console.log('Not in a git repository, will use regular clone');
         }
-        
+
         // Use git submodule add for proper submodule setup
         const cloneSuccess = await new Promise((resolve, reject) => {
             if (onProgress) onProgress({ step: 'cloning', message: 'Adding as git submodule...', progress: 10 });
-            
+
             // Use git submodule add if in a git repo, otherwise fall back to regular clone
-            const gitArgs = isGitRepo 
+            const gitArgs = isGitRepo
                 ? ['submodule', 'add', '--progress', gitUrl, `courses/${repoFolderName}`]
                 : ['clone', '--depth', '1', '--progress', gitUrl, repoPath];
-            
+
             const gitProcess = spawn('git', gitArgs, {
                 cwd: __dirname
             });
 
             let errorOutput = '';
-            
+
             gitProcess.stderr.on('data', (data) => {
                 const output = data.toString();
                 errorOutput += output;
-                
+
                 // Parse git progress (git outputs to stderr)
                 if (output.includes('Receiving objects:') || output.includes('Resolving deltas:') || output.includes('Cloning into')) {
                     const percentMatch = output.match(/(\d+)%/);
                     if (percentMatch && onProgress) {
                         const percent = parseInt(percentMatch[1]);
                         const adjustedPercent = 10 + (percent * 0.7); // Scale to 10-80%
-                        onProgress({ 
-                            step: 'cloning', 
+                        onProgress({
+                            step: 'cloning',
                             message: `Cloning repository... ${percent}%`,
                             progress: Math.floor(adjustedPercent)
                         });
@@ -413,16 +413,16 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
 
         // Read site_url from mkdocs.yml
         const siteUrl = getMkDocsSiteUrl(repoPath);
-        
+
         // Generate local path for serving (e.g., /docs/repo_name/site/)
         const localPath = `/docs/${repoFolderName}/site/`;
-        
+
         console.log(`Successfully cloned MkDocs repository to courses/${repoFolderName}`);
         if (siteUrl) {
             console.log(`MkDocs site_url: ${siteUrl}`);
         }
         console.log(`Local docs path: ${localPath}`);
-        
+
         // Build the MkDocs site in background (don't wait)
         // This allows the HTTP response to return quickly
         setImmediate(async () => {
@@ -436,10 +436,10 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
                 if (onProgress) onProgress({ step: 'warning', message: 'Cloned successfully but build failed. You may need to build manually.', progress: 100 });
             }
         });
-        
+
         // Return immediately with success (build happens in background)
         if (onProgress) onProgress({ step: 'complete', message: 'Repository cloned successfully! Building in background...', progress: 95 });
-        
+
         return { success: true, path: repoPath, folderName: repoFolderName, siteUrl, localPath };
 
     } catch (error) {
@@ -720,7 +720,7 @@ async function compressImage(buffer, filename) {
     try {
         const image = sharp(buffer);
         const metadata = await image.metadata();
-        
+
         // Scale down if too large (max 800px width/height)
         let processedImage = image;
         if (metadata.width > 800 || metadata.height > 800) {
@@ -729,20 +729,20 @@ async function compressImage(buffer, filename) {
                 withoutEnlargement: true
             });
         }
-        
+
         // Always convert to WebP for better compression
         // WebP provides 25-35% better compression than JPEG/PNG
         const compressed = await processedImage
-            .webp({ 
+            .webp({
                 quality: 80,
                 effort: 4  // Compression effort (0-6), 4 is good balance
             })
-            .toBuffer(); 
-        
+            .toBuffer();
+
         // Return buffer and new filename with .webp extension
         const nameWithoutExt = path.basename(filename, path.extname(filename));
         const newFilename = `${nameWithoutExt}.webp`;
-        
+
         return { buffer: compressed, filename: newFilename };
     } catch (error) {
         console.error('Image compression error:', error);
@@ -915,10 +915,10 @@ function processNextInQueue() {
         console.log('Cannot process queue: queue empty or active quiz exists');
         return; // No queue or already have active quiz
     }
-    
+
     const nextItem = quizQueue.shift();
     console.log(`Processing queued quiz: "${nextItem.quiz.title}"`);
-    
+
     // Create a proper push record
     const push = {
         id: nextItem.push.id,
@@ -928,9 +928,9 @@ function processNextInQueue() {
         timeout_seconds: nextItem.push.timeout_seconds,
         course_id: nextItem.push.course_id || nextItem.quiz.course_id || null
     };
-    
+
     currentActiveQuiz = push.quiz_id;
-    
+
     // Create push in database
     createPushInDB(push).then(() => {
         // Send to students via WebSocket
@@ -979,7 +979,7 @@ function processNextInQueue() {
         // Notify teachers about the push
         const teachers = Array.from(connectedUsers.values())
             .filter(user => user.role === 'teacher');
-        
+
         teachers.forEach(teacher => {
             io.to(teacher.socketId).emit('push_created', {
                 push_id: push.id,
@@ -988,7 +988,7 @@ function processNextInQueue() {
                 target_count: targetStudents.length
             });
         });
-        
+
         console.log(`Queued quiz "${nextItem.quiz.title}" sent to ${targetStudents.length} students`);
     }).catch(err => {
         console.error('Error creating push from queue:', err);
@@ -1007,8 +1007,8 @@ async function addToStudentQueue(userId, pushId, quizId, quiz) {
             INSERT INTO student_quiz_queue (id, user_id, push_id, quiz_id, course_id, status)
             VALUES (?, ?, ?, ?, ?, 'pending')
         `;
-        
-        db.run(query, [id, userId, pushId, quizId, courseId], function(err) {
+
+        db.run(query, [id, userId, pushId, quizId, courseId], function (err) {
             if (err) {
                 // Check if duplicate (already in queue)
                 if (err.message && err.message.includes('UNIQUE constraint')) {
@@ -1032,7 +1032,7 @@ async function removeFromStudentQueue(userId, pushId, status = 'answered') {
             WHERE user_id = ? AND push_id = ?
         `;
 
-        db.run(query, [status, userId, pushId], function(err) {
+        db.run(query, [status, userId, pushId], function (err) {
             if (err) {
                 reject(err);
             } else {
@@ -1548,9 +1548,9 @@ const createQuizInDB = (quiz) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         stmt.run([
-            quiz.id, quiz.title, quiz.content_text, 
+            quiz.id, quiz.title, quiz.content_text,
             JSON.stringify(quiz.images || []),
-            quiz.question_type, 
+            quiz.question_type,
             JSON.stringify(quiz.options || []),
             quiz.correct_answer,
             quiz.category_id,
@@ -1558,7 +1558,7 @@ const createQuizInDB = (quiz) => {
             quiz.created_by, quiz.timeout_seconds,
             quiz.is_scored !== undefined ? quiz.is_scored : 1,
             quiz.points !== undefined ? quiz.points : 1
-        ], function(err) {
+        ], function (err) {
             if (err) reject(err);
             else resolve({ id: quiz.id, ...quiz });
         });
@@ -1620,10 +1620,10 @@ const createPushInDB = (push) => {
             VALUES (?, ?, ?, ?, ?, ?)
         `);
         stmt.run([
-            push.id, push.quiz_id, push.pushed_by, 
+            push.id, push.quiz_id, push.pushed_by,
             JSON.stringify(push.target_scope), push.timeout_seconds,
             push.course_id || null
-        ], function(err) {
+        ], function (err) {
             if (err) reject(err);
             else resolve({ id: push.id, ...push });
         });
@@ -1641,7 +1641,7 @@ const createResponseInDB = (response) => {
             response.id, response.push_id, response.quiz_id, response.user_id,
             response.answer_text, response.started_at, response.answered_at,
             response.elapsed_ms, response.status
-        ], function(err) {
+        ], function (err) {
             if (err) reject(err);
             else resolve({ id: response.id, ...response });
         });
@@ -1657,18 +1657,18 @@ const createCourseInDB = (course) => {
         `);
         stmt.run(
             [
-                course.id, 
-                course.title, 
-                course.description || '', 
-                course.created_by, 
-                course.created_at, 
+                course.id,
+                course.title,
+                course.description || '',
+                course.created_by,
+                course.created_at,
                 course.access_code_hash || null,
                 course.docs_repo_url || null,
                 course.docs_branch || 'main',
                 course.docs_site_url || null,
                 course.docs_local_path || null
             ],
-            function(err) {
+            function (err) {
                 if (err) reject(err);
                 else resolve({ id: course.id, ...course });
             }
@@ -1757,7 +1757,7 @@ const enrollStudentInCourse = (courseId, studentId) => {
             INSERT INTO course_enrollments (id, course_id, student_id, enrolled_at)
             VALUES (?, ?, ?, ?)
         `;
-        db.run(query, [id, courseId, studentId, new Date().toISOString()], function(err) {
+        db.run(query, [id, courseId, studentId, new Date().toISOString()], function (err) {
             if (err) {
                 if (err.message && err.message.includes('UNIQUE constraint failed')) {
                     resolve({ alreadyEnrolled: true });
@@ -1959,7 +1959,7 @@ const updateCourseInDB = (courseId, teacherId, fields) => {
         params.push(courseId, teacherId);
 
         const query = `UPDATE courses SET ${updates.join(', ')} WHERE id = ? AND created_by = ?`;
-        db.run(query, params, function(err) {
+        db.run(query, params, function (err) {
             if (err) {
                 reject(err);
             } else {
@@ -2020,7 +2020,7 @@ const createAttendanceSession = (studentId, courseId, status, tabId = null) => {
             VALUES (?, ?, ?, ?, ?, ?)
         `;
 
-        db.run(query, [id, studentId, courseId, normalizedStatus, now, now], function(err) {
+        db.run(query, [id, studentId, courseId, normalizedStatus, now, now], function (err) {
             if (err) {
                 reject(err);
             } else {
@@ -2056,7 +2056,7 @@ const updateAttendanceSessionStatus = (sessionId, status, options = {}) => {
              SET status = ?, last_status_at = ?
              WHERE id = ?`,
             [normalizedStatus, now, sessionId],
-            function(err) {
+            function (err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -2097,7 +2097,7 @@ const endAttendanceSession = (sessionId, options = {}) => {
              SET status = 'ended', ended_at = ?, last_status_at = ?
              WHERE id = ?`,
             [now, now, sessionId],
-            function(err) {
+            function (err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -2175,7 +2175,7 @@ const deleteCourseInDB = (courseId, teacherId) => {
                     return;
                 }
 
-                db.run('DELETE FROM courses WHERE id = ? AND created_by = ?', [courseId, teacherId], function(err2) {
+                db.run('DELETE FROM courses WHERE id = ? AND created_by = ?', [courseId, teacherId], function (err2) {
                     if (err2) {
                         reject(err2);
                     } else {
@@ -2193,7 +2193,7 @@ const deleteCourseInDB = (courseId, teacherId) => {
 app.post('/api/login', authLimiter, async (req, res) => {
     try {
         const { username, password } = req.body;
-        
+
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password required' });
         }
@@ -2242,19 +2242,19 @@ app.post('/api/register', authLimiter, async (req, res) => {
         }
 
         const trimmedUsername = String(username).trim().toLowerCase();
-        
+
         // Username validation
         if (!/^[a-z0-9_]{3,30}$/.test(trimmedUsername)) {
             return res.status(400).json({ error: 'Username must be 3-30 characters (letters, numbers, underscore)' });
         }
-        
+
         // Username must start with a letter
         if (trimmedUsername.startsWith('_') || /^[0-9]/.test(trimmedUsername)) {
             return res.status(400).json({ error: 'Username must start with a letter' });
         }
-        
+
         // Check reserved usernames
-        const reserved = new Set(['admin','root','system','administrator','support','null','undefined','test','demo']);
+        const reserved = new Set(['admin', 'root', 'system', 'administrator', 'support', 'null', 'undefined', 'test', 'demo']);
         if (reserved.has(trimmedUsername)) {
             return res.status(400).json({ error: 'Username not allowed' });
         }
@@ -2454,7 +2454,7 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
         // Start git clone in background if URL provided
         if (repoUrl) {
             cloneId = `clone_${uuidv4()}`;
-            
+
             // Progress callback to emit updates via socket
             const onProgress = (progress) => {
                 io.emit('clone-progress', {
@@ -2463,7 +2463,7 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
                     ...progress
                 });
             };
-            
+
             // Clone in background - don't wait for it
             cloneGitRepoAsSubmodule(repoUrl, null, onProgress)
                 .then(cloneResult => {
@@ -2472,7 +2472,7 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
                         if (cloneResult.siteUrl) {
                             console.log(`✓ Site URL from mkdocs.yml: ${cloneResult.siteUrl}`);
                             // Update the course with the actual site URL
-                            db.run('UPDATE courses SET docs_site_url = ? WHERE docs_repo_url = ?', 
+                            db.run('UPDATE courses SET docs_site_url = ? WHERE docs_repo_url = ?',
                                 [cloneResult.siteUrl, repoUrl],
                                 (err) => {
                                     if (err) console.error('Failed to update docs_site_url:', err);
@@ -2523,8 +2523,8 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             clone_id: cloneId  // Send back the clone ID so frontend can track progress
         };
 
-        res.status(201).json({ 
-            course: responseCourse, 
+        res.status(201).json({
+            course: responseCourse,
             passkey: trimmedAccessCode,
             message: localRepoFolder ? `Course created! Cloning repository in background...` : 'Course created successfully'
         });
@@ -2567,7 +2567,7 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
         let localRepoFolder = null;
         if (typeof docs_repo_url !== 'undefined') {
             const newRepoUrl = docs_repo_url ? String(docs_repo_url).trim() : null;
-            
+
             // If URL changed and is a valid git URL, clone the new repository
             if (newRepoUrl && newRepoUrl !== course.docs_repo_url && isGitUrl(newRepoUrl)) {
                 try {
@@ -2587,12 +2587,12 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
                     }
                 } catch (cloneError) {
                     console.error('Failed to clone updated repository:', cloneError.message);
-                    return res.status(400).json({ 
+                    return res.status(400).json({
                         error: cloneError.message || 'Failed to clone repository. Please ensure it\'s a public, valid MkDocs project.'
                     });
                 }
             }
-            
+
             updateFields.docs_repo_url = newRepoUrl;
         }
 
@@ -2627,8 +2627,8 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
             local_repo_folder: localRepoFolder
         };
 
-        res.json({ 
-            course: responseCourse, 
+        res.json({
+            course: responseCourse,
             passkey_updated: typeof access_code !== 'undefined',
             message: localRepoFolder ? `Course updated and repository cloned to courses/${localRepoFolder}` : 'Course updated successfully'
         });
@@ -2677,7 +2677,7 @@ app.delete('/api/courses/:courseId', authenticateToken, async (req, res) => {
             removeCourseDirectory(repoFolderName);
         }
 
-        res.json({ 
+        res.json({
             message: 'Course deleted',
             cleaned_up: repoFolderName ? `Removed courses/${repoFolderName}` : null
         });
@@ -2972,7 +2972,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
 
         const { courseId } = req.params;
         const { mode } = req.query; // 'basic' or 'full'
-        
+
         const course = await getCourseById(courseId);
         if (!course || course.created_by !== req.user.userId) {
             return res.status(404).json({ error: 'Course not found or access denied' });
@@ -3060,7 +3060,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
 
         // Calculate statistics per student
         const studentStats = {};
-        
+
         students.forEach(student => {
             studentStats[student.id] = {
                 ...student,
@@ -3078,17 +3078,17 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
             if (!studentStats[response.user_id]) return;
 
             const stats = studentStats[response.user_id];
-            
+
             if (response.status === 'answered') {
                 stats.answered_count++;
-                
+
                 // Check correctness for scored quizzes
                 if (response.is_scored && response.correct_answer) {
                     const answerValue = parseStoredAnswer(response.answer_text);
                     const correctValue = parseStoredAnswer(response.correct_answer);
-                    
+
                     let isCorrect = false;
-                    
+
                     if (response.question_type === 'select' && answerValue && typeof answerValue === 'object') {
                         const selectedText = answerValue.selected_text || '';
                         const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
@@ -3119,7 +3119,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
                 const startTime = new Date(session.started_at);
                 const endTime = session.ended_at ? new Date(session.ended_at) : new Date(session.last_status_at);
                 const durationSeconds = Math.floor((endTime - startTime) / 1000);
-                
+
                 if (durationSeconds > 0) {
                     studentStats[session.user_id].total_time_spent += durationSeconds;
                 }
@@ -3132,25 +3132,25 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
             .sort((a, b) => a.total_score - b.total_score);
 
         scoredStudents.forEach((student, index) => {
-            student.percentile = scoredStudents.length > 1 
+            student.percentile = scoredStudents.length > 1
                 ? Math.round((index / (scoredStudents.length - 1)) * 100)
                 : 50;
         });
 
         // Generate CSV
         let csv = '';
-        
+
         if (mode === 'full') {
             // Full data export - simplified with essential fields only
             csv = 'Course,Teacher,User ID,Username,Display Name,Enrolled At,Total Score,Answered,Correct,Incorrect,Timeout,Time Spent (seconds),Percentile\n';
-            
+
             Object.values(studentStats).forEach(student => {
                 csv += `${escapeCSV(courseName)},${escapeCSV(teacherName)},${escapeCSV(student.id)},${escapeCSV(student.username)},${escapeCSV(student.display_name || '')},${escapeCSV(student.enrolled_at || '')},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.timeout_count},${student.total_time_spent},${student.percentile || 0}\n`;
             });
         } else {
             // Basic export - one row per student with summary
             csv = 'Course,Teacher,Name,Username,Enrolled At,Time Spent (min),Total Score,Answered,Correct,Incorrect,Percentile\n';
-            
+
             Object.values(studentStats).forEach(student => {
                 const timeMinutes = Math.round(student.total_time_spent / 60);
                 csv += `${escapeCSV(courseName)},${escapeCSV(teacherName)},${escapeCSV(student.display_name || student.username)},${escapeCSV(student.username)},${escapeCSV(student.enrolled_at || '')},${timeMinutes},${student.total_score},${student.answered_count},${student.correct_count},${student.incorrect_count},${student.percentile || 0}\n`;
@@ -3161,7 +3161,7 @@ app.get('/api/courses/:courseId/export-csv', authenticateToken, async (req, res)
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
         const cleanTitle = course.title.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
         const filename = `${cleanTitle}_students_${mode}_${timestamp}.csv`;
-        
+
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send('\ufeff' + csv); // UTF-8 BOM for Excel compatibility
@@ -3255,9 +3255,9 @@ app.get('/api/courses/:courseId/scores', authenticateToken, async (req, res) => 
             if (response.correct_answer) {
                 const answerValue = parseStoredAnswer(response.answer_text);
                 const correctValue = parseStoredAnswer(response.correct_answer);
-                
+
                 let isCorrect = false;
-                
+
                 if (response.question_type === 'select' && answerValue && typeof answerValue === 'object') {
                     // Extract answer from select-type response
                     const selectedText = answerValue.selected_text || '';
@@ -3328,7 +3328,7 @@ app.get('/api/courses/:courseId/scores', authenticateToken, async (req, res) => 
 
         // Sort by total_score descending and assign rankings
         studentScores.sort((a, b) => b.total_score - a.total_score);
-        
+
         let currentRank = 1;
         studentScores.forEach((student, index) => {
             if (index > 0 && student.total_score < studentScores[index - 1].total_score) {
@@ -3421,7 +3421,7 @@ app.post('/api/courses/:courseId/push-answers', authenticateToken, async (req, r
 
             const answerValue = parseStoredAnswer(response.answer_text);
             const correctValue = parseStoredAnswer(response.correct_answer);
-            
+
             let isCorrect = false;
             let studentAnswer = formatAnswerForDisplay(answerValue);
             let correctAnswer = formatAnswerForDisplay(correctValue);
@@ -3467,7 +3467,7 @@ app.post('/api/courses/:courseId/push-answers', authenticateToken, async (req, r
             // Find connected socket for this student
             const connectedStudent = Array.from(connectedUsers.values())
                 .find(user => user.userId === student.student_id && user.role === 'student');
-            
+
             if (connectedStudent) {
                 const socket = io.sockets.sockets.get(connectedStudent.socketId);
                 if (socket) {
@@ -3526,21 +3526,21 @@ app.post('/api/quizzes', authenticateToken, async (req, res) => {
         }
 
         const { title, content_text, images, question_type, options, correct_answer, category_id, course_id, timeout_seconds, is_scored, points } = req.body;
-        
+
         if (!title || !question_type) {
             return res.status(400).json({ error: 'Title and question type required' });
         }
-        
+
         // Basic validation and length limits (no XSS sanitization for trusted teacher content)
         const sanitizedTitle = String(title).trim().slice(0, 200);
         const sanitizedContent = content_text ? String(content_text).trim() : '';
-        
+
         // Options array validation
         let sanitizedOptions = [];
         if (Array.isArray(options)) {
             sanitizedOptions = options.map(opt => String(opt).trim().slice(0, 500)).slice(0, 20);
         }
-        
+
         // Correct answer validation
         let sanitizedCorrectAnswer = correct_answer;
         if (typeof correct_answer === 'string') {
@@ -3598,21 +3598,21 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
 
         const { quizId } = req.params;
         const { title, content_text, images, question_type, options, correct_answer, category_id, course_id, timeout_seconds, is_scored, points } = req.body;
-        
+
         if (!title || !question_type) {
             return res.status(400).json({ error: 'Title and question type required' });
         }
-        
+
         // Basic validation and length limits (no XSS sanitization for trusted teacher content)
         const sanitizedTitle = String(title).trim().slice(0, 200);
         const sanitizedContent = content_text ? String(content_text).trim() : '';
-        
+
         // Options array validation
         let sanitizedOptions = [];
         if (Array.isArray(options)) {
             sanitizedOptions = options.map(opt => String(opt).trim().slice(0, 500)).slice(0, 20);
         }
-        
+
         // Correct answer validation
         let sanitizedCorrectAnswer = correct_answer;
         if (typeof correct_answer === 'string') {
@@ -3660,7 +3660,7 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
             SET title = ?, content_text = ?, images = ?, question_type = ?, options = ?, correct_answer = ?, category_id = ?, timeout_seconds = ?, is_scored = ?, points = ?
             WHERE id = ? AND created_by = ?
         `);
-        
+
         stmt.run([
             sanitizedTitle,
             sanitizedContent,
@@ -3674,19 +3674,19 @@ app.put('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
             points !== undefined ? parseInt(points, 10) : 1,
             quizId,
             req.user.userId
-        ], function(err) {
+        ], function (err) {
             if (err) {
                 console.error('Update quiz error:', err);
                 return res.status(500).json({ error: 'Internal server error' });
             }
-            
+
             if (this.changes === 0) {
                 return res.status(404).json({ error: 'Quiz not found or access denied' });
             }
-            
+
             res.json({ message: 'Quiz updated successfully', quizId });
         });
-        
+
         stmt.finalize();
     } catch (error) {
         console.error('Edit quiz error:', error);
@@ -3747,11 +3747,11 @@ app.get('/api/quizzes/:quizId/responses', authenticateToken, async (req, res) =>
                     // Need to extract just the answer part without the option label
                     const selectedText = answerValue.selected_text || '';
                     answerDisplay = selectedText;
-                    
+
                     // Extract the answer after the closing parenthesis, e.g., "(c) 1945" -> "1945"
                     const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
                     const extractedAnswer = match ? match[1].trim() : selectedText.trim();
-                    
+
                     // Compare with correct answer (case-insensitive for text)
                     isCorrect = extractedAnswer.toLowerCase() === String(correctValue).toLowerCase().trim();
                 } else {
@@ -3826,7 +3826,7 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
         }
 
         const { name, description, parent_id, course_id } = req.body;
-        
+
         if (!name) {
             return res.status(400).json({ error: 'Category name required' });
         }
@@ -3852,24 +3852,24 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
             INSERT INTO quiz_categories (id, name, description, parent_id, course_id, created_by)
             VALUES (?, ?, ?, ?, ?, ?)
         `);
-        
-        stmt.run([categoryId, name, description || '', parent_id || null, course_id, req.user.userId], function(err) {
+
+        stmt.run([categoryId, name, description || '', parent_id || null, course_id, req.user.userId], function (err) {
             if (err) {
                 console.error('Create category error:', err);
                 return res.status(500).json({ error: 'Internal server error' });
             }
-            
-            res.json({ 
-                category: { 
-                    id: categoryId, 
-                    name, 
-                    description: description || '', 
+
+            res.json({
+                category: {
+                    id: categoryId,
+                    name,
+                    description: description || '',
                     parent_id: parent_id || null,
                     course_id
-                } 
+                }
             });
         });
-        
+
         stmt.finalize();
     } catch (error) {
         console.error('Create category error:', error);
@@ -3886,7 +3886,7 @@ app.put('/api/categories/:categoryId', authenticateToken, async (req, res) => {
 
         const { categoryId } = req.params;
         const { name, description } = req.body;
-        
+
         if (!name) {
             return res.status(400).json({ error: 'Category name required' });
         }
@@ -3896,18 +3896,18 @@ app.put('/api/categories/:categoryId', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Category not found or access denied' });
         }
 
-        db.run('UPDATE quiz_categories SET name = ?, description = ? WHERE id = ? AND created_by = ?', 
-            [name, description || '', categoryId, req.user.userId], 
-            function(err) {
+        db.run('UPDATE quiz_categories SET name = ?, description = ? WHERE id = ? AND created_by = ?',
+            [name, description || '', categoryId, req.user.userId],
+            function (err) {
                 if (err) {
                     console.error('Update category error:', err);
                     return res.status(500).json({ error: 'Internal server error' });
                 }
-                
+
                 if (this.changes === 0) {
                     return res.status(404).json({ error: 'Category not found or access denied' });
                 }
-                
+
                 res.json({ message: 'Category updated successfully' });
             }
         );
@@ -3943,16 +3943,16 @@ app.delete('/api/categories/:categoryId', authenticateToken, async (req, res) =>
             return res.status(404).json({ error: 'Category not found or access denied' });
         }
 
-        db.run('DELETE FROM quiz_categories WHERE id = ? AND created_by = ?', [categoryId, req.user.userId], function(err) {
+        db.run('DELETE FROM quiz_categories WHERE id = ? AND created_by = ?', [categoryId, req.user.userId], function (err) {
             if (err) {
                 console.error('Delete category error:', err);
                 return res.status(500).json({ error: 'Internal server error' });
             }
-            
+
             if (this.changes === 0) {
                 return res.status(404).json({ error: 'Category not found or access denied' });
             }
-            
+
             res.json({ message: 'Category deleted successfully' });
         });
     } catch (error) {
@@ -3970,16 +3970,16 @@ app.delete('/api/quizzes/:quizId', authenticateToken, async (req, res) => {
 
         const { quizId } = req.params;
 
-        db.run('DELETE FROM quizzes WHERE id = ? AND created_by = ?', [quizId, req.user.userId], function(err) {
+        db.run('DELETE FROM quizzes WHERE id = ? AND created_by = ?', [quizId, req.user.userId], function (err) {
             if (err) {
                 console.error('Delete quiz error:', err);
                 return res.status(500).json({ error: 'Internal server error' });
             }
-            
+
             if (this.changes === 0) {
                 return res.status(404).json({ error: 'Quiz not found or access denied' });
             }
-            
+
             res.json({ message: 'Quiz deleted successfully' });
         });
     } catch (error) {
@@ -4076,7 +4076,7 @@ app.post('/api/quizzes/import', authenticateToken, async (req, res) => {
 
         for (let i = 0; i < quizzes.length; i++) {
             const quizData = quizzes[i];
-            
+
             try {
                 // Validate required fields
                 if (!quizData.title || !quizData.question_type) {
@@ -4189,7 +4189,7 @@ app.get('/api/my-quiz-history', authenticateToken, async (req, res) => {
                 answer_text: row.answer_text
             }));
 
-            res.json({ 
+            res.json({
                 history,
                 total: history.length,
                 orphaned: history.filter(h => !h.quiz_exists).length
@@ -4217,7 +4217,7 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
                 db.run(
                     `DELETE FROM student_quiz_queue WHERE user_id = ?`,
                     [req.user.userId],
-                    function(err) {
+                    function (err) {
                         if (err) {
                             reject(err);
                         } else {
@@ -4234,7 +4234,7 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
                 db.run(
                     `DELETE FROM quiz_responses WHERE user_id = ?`,
                     [req.user.userId],
-                    function(err) {
+                    function (err) {
                         if (err) {
                             reject(err);
                         } else {
@@ -4253,7 +4253,7 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
                      WHERE user_id = ? 
                      AND quiz_id NOT IN (SELECT id FROM quizzes)`,
                     [req.user.userId],
-                    function(err) {
+                    function (err) {
                         if (err) {
                             reject(err);
                         } else {
@@ -4272,7 +4272,7 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
                      WHERE user_id = ? 
                      AND quiz_id NOT IN (SELECT id FROM quizzes)`,
                     [req.user.userId],
-                    function(err) {
+                    function (err) {
                         if (err) {
                             reject(err);
                         } else {
@@ -4289,7 +4289,7 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
         syncStudentQueueCache(req.user.userId, snapshot);
         updateOnlineListDebounced();
 
-        res.json({ 
+        res.json({
             message: 'Cleanup completed',
             removed: totalRemoved,
             queue: buildQueueUpdatePayload(snapshot)
@@ -4335,14 +4335,14 @@ app.get('/api/queue-status', authenticateToken, async (req, res) => {
 app.post('/api/pushes', authenticateToken, async (req, res) => {
     // Extend timeout for large classes (default is 120s, set to 5 minutes)
     req.setTimeout(300000);
-    
+
     try {
         if (req.user.role !== 'teacher') {
             return res.status(403).json({ error: 'Teacher access required' });
         }
 
         const { quiz_id, target_scope, timeout_seconds, course_id } = req.body;
-        
+
         if (!quiz_id) {
             return res.status(400).json({ error: 'Quiz ID required' });
         }
@@ -4426,7 +4426,7 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
                     try {
                         // Check if this quiz is already in student's queue
                         const alreadyInQueue = await checkQuizInStudentQueue(student.userId, quiz_id, effectiveCourseId);
-                        
+
                         if (alreadyInQueue) {
                             console.log(`Quiz "${quiz.title}" already in queue for ${student.username}`);
                             return { status: 'skipped', student };
@@ -4434,7 +4434,7 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
 
                         // Check if student already answered this quiz
                         const alreadyAnswered = await checkQuizAlreadyAnswered(student.userId, quiz_id);
-                        
+
                         if (alreadyAnswered) {
                             console.log(`Quiz "${quiz.title}" already answered by ${student.username}`);
                             return { status: 'skipped', student };
@@ -4490,11 +4490,11 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
         // Notify teachers about the push
         const teachers = Array.from(connectedUsers.values())
             .filter(user => user.role === 'teacher');
-        
+
         const message = skippedCount > 0
             ? `Quiz sent to ${addedCount}/${targetStudents.length} students (${skippedCount} already have it)`
             : `Quiz sent to ${addedCount} students`;
-        
+
         teachers.forEach(teacher => {
             io.to(teacher.socketId).emit('push_created', {
                 push_id: push.id,
@@ -4510,7 +4510,7 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
         // Note: updateOnlineList is debounced and will be triggered by socket events from students
         // No need to call it immediately here during mass push to avoid cascade
 
-        res.json({ 
+        res.json({
             push,
             added_count: addedCount,
             skipped_count: skippedCount,
@@ -4525,14 +4525,14 @@ app.post('/api/pushes', authenticateToken, async (req, res) => {
 // Bulk push multiple quizzes
 app.post('/api/pushes/bulk', authenticateToken, async (req, res) => {
     req.setTimeout(300000); // 5 minutes timeout for bulk operations
-    
+
     try {
         if (req.user.role !== 'teacher') {
             return res.status(403).json({ error: 'Teacher access required' });
         }
 
         const { quiz_ids, course_id } = req.body;
-        
+
         if (!quiz_ids || !Array.isArray(quiz_ids) || quiz_ids.length === 0) {
             return res.status(400).json({ error: 'Quiz IDs array required' });
         }
@@ -4560,9 +4560,9 @@ app.post('/api/pushes/bulk', authenticateToken, async (req, res) => {
         // Get connected students
         const targetStudents = Array.from(connectedUsers.values())
             .filter(user => {
-                return user.role === 'student' && 
-                       enrolledSet.has(user.userId) && 
-                       user.activeCourseId === course_id;
+                return user.role === 'student' &&
+                    enrolledSet.has(user.userId) &&
+                    user.activeCourseId === course_id;
             });
 
         const results = {
@@ -4688,7 +4688,7 @@ app.post('/api/pushes/bulk', authenticateToken, async (req, res) => {
         // Notify teachers
         const teachers = Array.from(connectedUsers.values())
             .filter(user => user.role === 'teacher');
-        
+
         teachers.forEach(teacher => {
             io.to(teacher.socketId).emit('push_created', {
                 bulk: true,
@@ -4822,11 +4822,11 @@ app.get('/api/pushes/:pushId/responses', authenticateToken, async (req, res) => 
         // Calculate correctness for each response
         const responsesWithCorrectness = responses.map(response => {
             let isCorrect = null;
-            
+
             if (push.correct_answer && response.status === 'answered') {
                 const answerValue = parseStoredAnswer(response.answer_text);
                 const correctValue = parseStoredAnswer(push.correct_answer);
-                
+
                 if (push.question_type === 'select' && answerValue && typeof answerValue === 'object') {
                     const selectedText = answerValue.selected_text || '';
                     const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
@@ -4934,7 +4934,7 @@ app.get('/api/monitor/all-active-quizzes', authenticateToken, async (req, res) =
                 if (student.response_status === 'answered' && push.correct_answer && student.answer_text) {
                     const answerValue = parseStoredAnswer(student.answer_text);
                     const correctValue = parseStoredAnswer(push.correct_answer);
-                    
+
                     if (push.question_type === 'select' && answerValue && typeof answerValue === 'object') {
                         const selectedText = answerValue.selected_text || '';
                         const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
@@ -4944,14 +4944,14 @@ app.get('/api/monitor/all-active-quizzes', authenticateToken, async (req, res) =
                         // For checkbox, compare arrays
                         const answerSet = new Set(answerValue.map(v => String(v).toLowerCase().trim()));
                         const correctSet = new Set(correctValue.map(v => String(v).toLowerCase().trim()));
-                        isCorrect = answerSet.size === correctSet.size && 
-                                   [...answerSet].every(v => correctSet.has(v));
+                        isCorrect = answerSet.size === correctSet.size &&
+                            [...answerSet].every(v => correctSet.has(v));
                     } else {
                         const answerDisplay = formatAnswerForDisplay(answerValue);
                         const correctDisplay = formatAnswerForDisplay(correctValue);
                         isCorrect = answerDisplay.toLowerCase().trim() === correctDisplay.toLowerCase().trim();
                     }
-                    
+
                     status = 'answered';
                 }
 
@@ -5164,10 +5164,10 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
         console.log('Resolved Push ID:', pushId);
         console.log('Quiz ID:', targetQuizId);
         console.log('Push data exists:', !!pushData);
-        
+
         // Gather ALL students who have this quiz in their queue or responses (not just this push)
         let targetUsers = (pushData && Array.isArray(pushData.targetUsers)) ? pushData.targetUsers : [];
-        
+
         if (targetQuizId) {
             try {
                 // Get all students who have ANY queue entry or response for this quiz
@@ -5190,7 +5190,7 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
                 });
 
                 const affectedUserIds = allAffectedRows.map(row => row.user_id).filter(Boolean);
-                
+
                 // Merge with in-memory targets
                 const allUsers = new Set([...targetUsers, ...affectedUserIds]);
                 targetUsers = Array.from(allUsers);
@@ -5198,7 +5198,7 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
                 console.error('Error loading all affected users for undo:', lookupError);
             }
         }
-        
+
         if ((!Array.isArray(targetUsers) || targetUsers.length === 0) && pushId) {
             try {
                 const responseUserRows = await new Promise((resolve, reject) => {
@@ -5231,17 +5231,17 @@ app.post('/api/pushes/:identifier/undo', authenticateToken, async (req, res) => 
                 .filter(user => user.role === 'student' && targetUsers.includes(user.userId));
 
             console.log('Connected targets found:', connectedTargets.length);
-            
+
             for (const student of connectedTargets) {
                 console.log(`Processing undo for student: ${student.username} (${student.socketId})`);
-                
+
                 // Send undo event to close dialog if they're viewing this quiz
                 io.to(student.socketId).emit('quiz_undo', {
                     push_id: pushId,
                     quiz_id: targetQuizId,
                     course_id: pushCourseId || student.activeCourseId || null
                 });
-                
+
                 const snapshot = await getQueueSnapshot(student.userId, pushCourseId || student.activeCourseId || null);
                 syncStudentQueueCache(student.userId, snapshot);
 
@@ -5326,14 +5326,14 @@ app.get('/api/check-response/:pushId', authenticateToken, (req, res) => {
     }
 
     const { pushId } = req.params;
-    
+
     db.get('SELECT id FROM quiz_responses WHERE push_id = ? AND user_id = ?',
         [pushId, req.user.userId], (err, row) => {
             if (err) {
                 console.error('Error checking response:', err);
                 return res.status(500).json({ error: 'Database error' });
             }
-            
+
             res.json({ already_answered: !!row });
         });
 });
@@ -5958,7 +5958,7 @@ io.on('connection', (socket) => {
             }
 
             const { push_id, answer, answered_at } = data;
-            
+
             if (!activePushes.has(push_id)) {
                 socket.emit('error', { message: 'Quiz no longer active' });
                 return;
@@ -6038,8 +6038,8 @@ io.on('connection', (socket) => {
                             });
                         }
 
-                        socket.emit('answer_submitted', { 
-                            push_id, 
+                        socket.emit('answer_submitted', {
+                            push_id,
                             message: 'Answer submitted successfully',
                             course_id: push.course_id || user.activeCourseId || null
                         });
@@ -6064,13 +6064,13 @@ io.on('connection', (socket) => {
                         // Notify teachers with correctness information
                         const teachers = Array.from(connectedUsers.values())
                             .filter(u => u.role === 'teacher');
-                        
+
                         // Calculate correctness
                         let isCorrect = null;
                         if (push.quiz && push.quiz.correct_answer) {
                             const answerValue = parseStoredAnswer(serializedAnswer);
                             const correctValue = parseStoredAnswer(push.quiz.correct_answer);
-                            
+
                             if (push.quiz.question_type === 'select' && answerValue && typeof answerValue === 'object') {
                                 const selectedText = answerValue.selected_text || '';
                                 const match = selectedText.match(/^\([a-z]\)\s*(.+)$/i);
@@ -6082,7 +6082,7 @@ io.on('connection', (socket) => {
                                 isCorrect = answerDisplay.toLowerCase().trim() === correctDisplay.toLowerCase().trim();
                             }
                         }
-                        
+
                         teachers.forEach(teacher => {
                             const studentDisplayName = user.display_name || user.username;
                             io.to(teacher.socketId).emit('quiz_response', {
@@ -6163,9 +6163,9 @@ const updateOnlineList = () => {
         console.log('[updateOnlineList] Skipping - already running');
         return;
     }
-    
+
     isUpdateOnlineListRunning = true;
-    
+
     const teachers = Array.from(connectedUsers.values())
         .filter(user => user.role === 'teacher');
 
@@ -6313,7 +6313,7 @@ const updateOnlineList = () => {
         teachers.forEach(teacher => {
             io.to(teacher.socketId).emit('online_students', { students: studentsForTeachers });
         });
-        
+
         isUpdateOnlineListRunning = false;
     }).catch(err => {
         console.error('updateOnlineList error:', err);
@@ -6334,13 +6334,13 @@ app.post('/api/upload/assignment-image', authenticateToken, upload.single('image
 
         // Compress and convert to WebP
         const result = await compressImage(req.file.buffer, req.file.originalname);
-        
+
         // Generate filename with assignmentId prefix for easy cleanup
         // Format: {assignmentId}_{uuid}.webp
         const fileId = uuidv4();
         const prefix = assignmentId || 'temp';
         const filename = `${prefix}_${fileId}.webp`;
-        
+
         // Organize files by type and ID
         let subDir;
         if (type === 'submission' && assignmentId) {
@@ -6353,14 +6353,14 @@ app.post('/api/upload/assignment-image', authenticateToken, upload.single('image
             // uploads/assignments/temp/ (for new assignments being created)
             subDir = path.join('assignments', 'temp');
         }
-        
+
         const uploadDir = path.join(uploadsDir, subDir);
-        
+
         // Create directory if it doesn't exist
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
-        
+
         const filepath = path.join(uploadDir, filename);
 
         // Save compressed image to disk
@@ -6368,11 +6368,11 @@ app.post('/api/upload/assignment-image', authenticateToken, upload.single('image
 
         // Return the URL path
         const imageUrl = `/uploads/${subDir.replace(/\\/g, '/')}/${filename}`;
-        
+
         console.log(`Uploaded and converted to WebP: ${req.file.originalname} -> ${subDir}/${filename} (${result.buffer.length} bytes, ${Math.round((1 - result.buffer.length / req.file.size) * 100)}% smaller)`);
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             imageUrl,
             originalSize: req.file.size,
             compressedSize: result.buffer.length,
@@ -6390,7 +6390,7 @@ app.post('/api/upload/assignment-image', authenticateToken, upload.single('image
 // Helper: Calculate deadline from assignment
 function calculateAssignmentDeadline(assignment) {
     if (!assignment.opened_at) return null;
-    
+
     if (assignment.deadline_type === 'specific' && assignment.deadline_datetime) {
         return assignment.deadline_datetime;
     } else if (assignment.deadline_type === 'duration') {
@@ -6531,7 +6531,7 @@ app.get('/api/courses/:courseId/assignments', authenticateToken, async (req, res
         // For students, only show open assignments and add submission status
         if (req.user.role === 'student') {
             const openAssignments = assignments.filter(a => a.status === 'open');
-            
+
             // Get submission status for each assignment
             const assignmentsWithStatus = await Promise.all(openAssignments.map(async (assignment) => {
                 const submission = await new Promise((resolve, reject) => {
@@ -6657,7 +6657,7 @@ app.patch('/api/assignments/:assignmentId/status', authenticateToken, async (req
             deadline
         });
 
-        res.json({ 
+        res.json({
             assignment: {
                 ...updatedAssignment,
                 deadline
@@ -6946,17 +6946,17 @@ app.delete('/api/assignments/:assignmentId', authenticateToken, async (req, res)
  */
 app.post('/api/progress', async (req, res) => {
     try {
-        const { 
-            userId, 
-            courseId, 
-            sessionId, 
-            pageUrl, 
-            progress, 
+        const {
+            userId,
+            courseId,
+            sessionId,
+            pageUrl,
+            progress,
             trigger,
             // Legacy format support
-            sectionId, 
-            sectionTitle, 
-            completedSections = [] 
+            sectionId,
+            sectionTitle,
+            completedSections = []
         } = req.body;
 
         if (!userId || !courseId) {
@@ -6978,17 +6978,17 @@ app.post('/api/progress', async (req, res) => {
                     (id, user_id, course_id, section_id, section_title, page_url, completed_at, session_id, progress_data)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
-                        progressId, 
-                        userId, 
-                        courseId, 
+                        progressId,
+                        userId,
+                        courseId,
                         trigger ? trigger.sectionId : 'summary',
                         trigger ? trigger.sectionTitle : 'Progress Update',
-                        pageUrl || '', 
-                        now, 
+                        pageUrl || '',
+                        now,
                         sessionId || null,
                         JSON.stringify(progress)
                     ],
-                    function(err) {
+                    function (err) {
                         if (err) reject(err);
                         else resolve();
                     }
@@ -7013,7 +7013,7 @@ app.post('/api/progress', async (req, res) => {
                         `INSERT OR IGNORE INTO course_sections (id, course_id, section_id, section_title, chapter_id)
                         VALUES (?, ?, ?, ?, ?)`,
                         [uuidv4(), courseId, section.sectionId, section.title, section.chapterId],
-                        function(err) {
+                        function (err) {
                             if (err) reject(err);
                             else resolve();
                         }
@@ -7034,16 +7034,16 @@ app.post('/api/progress', async (req, res) => {
                         last_accessed_at = excluded.last_accessed_at,
                         chapter_progress = excluded.chapter_progress`,
                     [
-                        uuidv4(), 
-                        userId, 
-                        courseId, 
+                        uuidv4(),
+                        userId,
+                        courseId,
                         progress.overall.total,
-                        progress.overall.completed, 
-                        progress.overall.percentage, 
+                        progress.overall.completed,
+                        progress.overall.percentage,
                         now,
                         JSON.stringify(progress.chapters)
                     ],
-                    function(err) {
+                    function (err) {
                         if (err) reject(err);
                         else resolve();
                     }
@@ -7071,7 +7071,7 @@ app.post('/api/progress', async (req, res) => {
                     (id, user_id, course_id, section_id, section_title, page_url, completed_at, session_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                     [progressId, userId, courseId, sectionId, sectionTitle || '', pageUrl || '', now, sessionId || null],
-                    function(err) {
+                    function (err) {
                         if (err) reject(err);
                         else resolve();
                     }
@@ -7086,7 +7086,7 @@ app.post('/api/progress', async (req, res) => {
                             `INSERT OR IGNORE INTO course_sections (id, course_id, section_id, section_title)
                             VALUES (?, ?, ?, ?)`,
                             [uuidv4(), courseId, secId, ''],
-                            function(err) {
+                            function (err) {
                                 if (err) reject(err);
                                 else resolve();
                             }
@@ -7124,7 +7124,7 @@ app.post('/api/progress', async (req, res) => {
                         progress_percentage = excluded.progress_percentage,
                         last_accessed_at = excluded.last_accessed_at`,
                     [uuidv4(), userId, courseId, totalSections, completedCount, progressPercentage, now],
-                    function(err) {
+                    function (err) {
                         if (err) reject(err);
                         else resolve();
                     }
@@ -7159,10 +7159,10 @@ app.get('/api/progress/:courseId/:userId', async (req, res) => {
                 [userId, courseId],
                 (err, row) => {
                     if (err) reject(err);
-                    else resolve(row || { 
-                        total_sections: 0, 
-                        completed_sections: 0, 
-                        progress_percentage: 0 
+                    else resolve(row || {
+                        total_sections: 0,
+                        completed_sections: 0,
+                        progress_percentage: 0
                     });
                 }
             );
@@ -7282,8 +7282,8 @@ app.get('/api/courses/:courseId/progress', authenticateToken, async (req, res) =
                 const actualTotalSections = sectionsCount;
                 const completedSections = s.completed_sections;
                 // Recalculate percentage based on actual section count
-                const actualPercentage = actualTotalSections > 0 
-                    ? Math.round((completedSections / actualTotalSections) * 100 * 100) / 100
+                const actualPercentage = actualTotalSections > 0
+                    ? Math.round((completedSections / actualTotalSections) * 10000) / 100
                     : 0;
 
                 return {
