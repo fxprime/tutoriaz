@@ -10,3 +10,8 @@
 	path = courses/iot_basic_course
 	url = https://github.com/fxprime/iot_basic_course.git
 	branch = main
+
+[submodule "courses/uno_watering_tutorial"]
+	path = courses/uno_watering_tutorial
+	url = git@github.com:fxprime/uno_watering_tutorial.git
+	branch = main
