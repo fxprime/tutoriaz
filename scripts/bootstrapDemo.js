@@ -237,7 +237,7 @@ function exec(db, sql) {
 
 function run(db, sql, params = []) {
     return new Promise((resolve, reject) => {
-        db.run(sql, params, function(err) {
+        db.run(sql, params, function (err) {
             if (err) {
                 reject(err);
             } else {
@@ -300,6 +300,36 @@ async function applySchema(db) {
 
     await exec(db, courseSql);
 }
+
+async function applyMigrations(db) {
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
+
+    if (!fs.existsSync(migrationsDir)) {
+        console.log('No migrations directory found, skipping migrations.');
+        return;
+    }
+
+    // Get all .sql migration files and sort them
+    const migrationFiles = fs.readdirSync(migrationsDir)
+        .filter(file => file.endsWith('.sql'))
+        .sort();
+
+    console.log(`Found ${migrationFiles.length} migration files.`);
+
+    for (const file of migrationFiles) {
+        const migrationPath = path.join(migrationsDir, file);
+        const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+
+        try {
+            await exec(db, migrationSql);
+            console.log(`  ✓ Applied migration: ${file}`);
+        } catch (error) {
+            console.error(`  ✗ Failed to apply migration ${file}:`, error.message);
+            throw error;
+        }
+    }
+}
+
 
 async function upsertTeacher(db, teacherConfig) {
     const passwordHash = await bcrypt.hash(teacherConfig.password, 10);
@@ -579,6 +609,10 @@ async function main() {
         await exec(db, 'PRAGMA foreign_keys = ON;');
         await applySchema(db);
         console.log('Database schema applied.');
+
+        await applyMigrations(db);
+        console.log('All migrations applied.');
+
 
         const teacher = await upsertTeacher(db, config.teacher);
         console.log(`Teacher ready -> username: ${teacher.username} (password: ${teacher.password})`);

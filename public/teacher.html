@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,10 +11,12 @@
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
             font-family: Arial, sans-serif;
             background-color: #f5f5f5;
         }
+
         .header {
             background-color: #007bff;
             color: white;
@@ -22,14 +25,17 @@
             justify-content: space-between;
             align-items: center;
         }
+
         .header h1 {
             font-size: 20px;
         }
+
         .user-info {
             display: flex;
             align-items: center;
             gap: 15px;
         }
+
         .logout-btn {
             background-color: #dc3545;
             color: white;
@@ -38,6 +44,7 @@
             border-radius: 4px;
             cursor: pointer;
         }
+
         .profile-btn {
             background-color: #6c757d;
             color: white;
@@ -46,9 +53,11 @@
             border-radius: 4px;
             cursor: pointer;
         }
+
         .profile-btn:hover {
             background-color: #5a6268;
         }
+
         .teacher-lobby {
             max-width: 960px;
             margin: 30px auto;
@@ -60,14 +69,17 @@
             flex-direction: column;
             gap: 24px;
         }
+
         .teacher-lobby h2 {
             font-size: 24px;
             color: #1f2937;
         }
+
         .lobby-intro {
             font-size: 14px;
             color: #4b5563;
         }
+
         .course-form {
             display: grid;
             gap: 16px;
@@ -76,11 +88,13 @@
             border-radius: 10px;
             padding: 20px;
         }
+
         .course-form label {
             font-weight: bold;
             font-size: 14px;
             color: #1f2937;
         }
+
         .course-form input,
         .course-form textarea {
             width: 100%;
@@ -89,19 +103,23 @@
             border-radius: 6px;
             font-size: 14px;
         }
+
         .course-form textarea {
             resize: vertical;
             min-height: 80px;
         }
+
         .course-form .form-row {
             display: grid;
             gap: 12px;
         }
+
         .passkey-row {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 140px;
             gap: 12px;
         }
+
         .generate-btn {
             background-color: #2563eb;
             color: white;
@@ -110,9 +128,11 @@
             cursor: pointer;
             font-size: 14px;
         }
+
         .generate-btn:hover {
             background-color: #1d4ed8;
         }
+
         .course-form .primary-btn {
             background-color: #2563eb;
             color: white;
@@ -122,9 +142,11 @@
             font-size: 15px;
             cursor: pointer;
         }
+
         .course-form .primary-btn:hover {
             background-color: #1d4ed8;
         }
+
         .passkey-notice {
             background-color: #fef3c7;
             border: 1px solid #facc15;
@@ -133,11 +155,13 @@
             padding: 14px 18px;
             font-size: 14px;
         }
+
         .course-card-list {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 16px;
         }
+
         .teacher-course-card {
             background: #ffffff;
             border: 1px solid #e5e7eb;
@@ -148,25 +172,30 @@
             gap: 12px;
             box-shadow: 0 4px 15px rgba(15, 23, 42, 0.06);
         }
+
         .teacher-course-card h4 {
             margin: 0;
             font-size: 18px;
             color: #111827;
         }
+
         .teacher-course-card p {
             margin: 0;
             font-size: 14px;
             color: #4b5563;
         }
+
         .teacher-course-card .meta {
             font-size: 13px;
             color: #6b7280;
         }
+
         .course-card-actions {
             display: flex;
             gap: 10px;
             margin-top: auto;
         }
+
         .course-card-actions button {
             flex: 1;
             padding: 10px;
@@ -175,27 +204,34 @@
             cursor: pointer;
             font-size: 14px;
         }
+
         .course-card-actions .select-btn {
             background-color: #2563eb;
             color: white;
         }
+
         .course-card-actions .select-btn:hover {
             background-color: #1d4ed8;
         }
+
         .course-card-actions .edit-btn {
             background-color: #f59e0b;
             color: white;
         }
+
         .course-card-actions .edit-btn:hover {
             background-color: #d97706;
         }
+
         .course-card-actions .delete-btn {
             background-color: #fee2e2;
             color: #b91c1c;
         }
+
         .course-card-actions .delete-btn:hover {
             background-color: #fecaca;
         }
+
         .course-header-bar {
             background: #ffffff;
             border-radius: 8px;
@@ -207,16 +243,19 @@
             gap: 16px;
             margin: 20px;
         }
+
         .course-header-bar h2 {
             margin: 0;
             font-size: 22px;
             color: #1f2937;
         }
+
         .course-meta-line {
             margin: 0;
             font-size: 14px;
             color: #4b5563;
         }
+
         .back-to-lobby-btn {
             padding: 10px 18px;
             border: none;
@@ -226,9 +265,11 @@
             cursor: pointer;
             font-size: 14px;
         }
+
         .back-to-lobby-btn:hover {
             background-color: #d1d5db;
         }
+
         .empty-state {
             border: 1px dashed #d1d5db;
             border-radius: 8px;
@@ -237,22 +278,26 @@
             color: #6b7280;
             font-size: 14px;
         }
+
         .main-content {
             display: flex;
             height: calc(100vh - 60px);
             position: relative;
             overflow: visible;
         }
+
         .content-area {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
             transition: all 0.3s ease;
         }
+
         .main-content.sidebar-collapsed .content-area {
             width: 100%;
             margin-right: 0;
         }
+
         .sidebar {
             width: 450px;
             background-color: white;
@@ -265,12 +310,14 @@
             position: relative;
             flex-shrink: 0;
         }
+
         .main-content.sidebar-collapsed .sidebar {
             width: 0;
             min-width: 0;
             border: none;
             overflow: hidden;
         }
+
         .sidebar-toggle {
             position: absolute;
             right: 10px;
@@ -283,7 +330,7 @@
             cursor: pointer;
             font-size: 14px;
             z-index: 1000;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
             transition: all 0.3s ease;
             width: 35px;
             height: 35px;
@@ -291,6 +338,7 @@
             align-items: center;
             justify-content: center;
         }
+
         .main-content.sidebar-collapsed .sidebar-toggle {
             position: fixed;
             right: 20px;
@@ -298,28 +346,34 @@
             left: auto;
             background-color: #28a745;
             border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
+
         .sidebar-toggle:hover {
             background-color: #0056b3;
         }
+
         .sidebar-section {
             padding: 20px;
             border-bottom: 1px solid #eee;
         }
+
         .sidebar-section.quiz-section {
             flex: 1;
             overflow-y: auto;
         }
+
         .sidebar-section h3 {
             margin-bottom: 15px;
             color: #333;
             font-size: 16px;
         }
+
         .online-students {
             max-height: 300px;
             overflow-y: auto;
         }
+
         .student-item {
             padding: 8px 12px;
             background-color: #f8f9fa;
@@ -327,39 +381,48 @@
             border-radius: 4px;
             font-size: 14px;
         }
+
         .student-item.interactive {
             cursor: pointer;
             transition: background-color 0.2s ease;
         }
+
         .student-item.interactive:hover,
         .student-item.interactive:focus {
             background-color: #e2e8f0;
         }
+
         .student-item.interactive:focus-visible {
             outline: none;
             box-shadow: 0 0 0 2px #2563eb;
         }
+
         .student-item .name {
             font-weight: bold;
             display: flex;
             align-items: center;
             gap: 6px;
         }
+
         .student-item .label-text {
             font-weight: 600;
         }
+
         .student-item .status {
             color: #28a745;
             font-size: 12px;
         }
+
         .student-item .meta-line {
             font-size: 12px;
             color: #4b5563;
             margin-top: 4px;
         }
+
         .student-item .meta-line strong {
             color: #1f2937;
         }
+
         .student-item .queue-info {
             margin-top: 5px;
             font-size: 11px;
@@ -369,14 +432,17 @@
             border-radius: 3px;
             display: inline-block;
         }
+
         .student-item .queue-info.viewing {
             background-color: #d1ecf1;
             color: #0c5460;
         }
+
         .student-item .queue-info.pending {
             background-color: #fff3cd;
             color: #856404;
         }
+
         .student-detail-modal {
             position: fixed;
             inset: 0;
@@ -387,9 +453,11 @@
             z-index: 2000;
             padding: 24px;
         }
+
         .student-detail-modal.hidden {
             display: none;
         }
+
         .student-detail-content {
             background: #ffffff;
             border-radius: 10px;
@@ -399,6 +467,7 @@
             overflow-y: auto;
             box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
         }
+
         .student-detail-header {
             display: flex;
             align-items: center;
@@ -406,40 +475,48 @@
             padding: 20px 24px;
             border-bottom: 1px solid #e5e7eb;
         }
+
         .student-detail-body {
             padding: 20px 24px;
             display: grid;
             gap: 18px;
         }
+
         .student-detail-section {
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 16px;
             background: #f9fafb;
         }
+
         .student-detail-grid {
             display: grid;
             gap: 6px;
             font-size: 14px;
             color: #374151;
         }
+
         .student-detail-grid strong {
             color: #111827;
         }
+
         .student-detail-kv {
             display: flex;
             justify-content: space-between;
             font-size: 13px;
             color: #4b5563;
         }
-        .student-detail-kv + .student-detail-kv {
+
+        .student-detail-kv+.student-detail-kv {
             margin-top: 6px;
         }
+
         .student-detail-empty {
             color: #6b7280;
             font-size: 13px;
             font-style: italic;
         }
+
         .student-detail-close {
             border: none;
             background: transparent;
@@ -447,9 +524,11 @@
             font-size: 18px;
             cursor: pointer;
         }
+
         .student-detail-close:hover {
             color: #111827;
         }
+
         .queue-item {
             padding: 8px 12px;
             background-color: #f8f9fa;
@@ -457,26 +536,32 @@
             border-radius: 4px;
             font-size: 14px;
         }
+
         .queue-item.active {
             background-color: #d4edda;
             border: 1px solid #c3e6cb;
         }
+
         .queue-item.queued {
             background-color: #fff3cd;
             border: 1px solid #ffeaa7;
         }
+
         .quiz-section {
             flex: 1;
             display: flex;
             flex-direction: column;
         }
+
         .quiz-controls {
             margin-bottom: 15px;
         }
+
         .quiz-list {
             flex: 1;
             overflow-y: auto;
         }
+
         .quiz-item {
             background-color: #f8f9fa;
             padding: 15px;
@@ -486,9 +571,11 @@
             position: relative;
             transition: padding-left 0.2s;
         }
+
         .multi-select-mode .quiz-item {
             padding-left: 45px;
         }
+
         .quiz-checkbox {
             position: absolute;
             left: 12px;
@@ -499,25 +586,31 @@
             display: none;
             z-index: 10;
         }
+
         .multi-select-mode .quiz-checkbox {
             display: block;
         }
+
         .quiz-item.selected {
             background-color: #e3f2fd;
             border-color: #2196f3;
         }
+
         #pushSelectedBtn {
             transition: opacity 0.2s;
         }
+
         .quiz-id-label {
             font-size: 11px;
             color: #6b7280;
             margin: 4px 0 8px 0;
             display: block;
         }
+
         .category-section {
             margin-bottom: 25px;
         }
+
         .category-title {
             background-color: #007bff;
             color: white;
@@ -527,29 +620,35 @@
             font-size: 14px;
             font-weight: bold;
         }
+
         .quiz-item {
             margin-left: 15px;
             margin-bottom: 15px;
         }
+
         .quiz-item h4,
         .quiz-item h5 {
             color: #333;
             margin-bottom: 8px;
         }
+
         .quiz-item .quiz-info {
             font-size: 12px;
             color: #666;
             margin-bottom: 10px;
         }
+
         .btn-sm {
             padding: 4px 8px;
             font-size: 12px;
             margin-right: 5px;
         }
+
         .quiz-actions {
             display: flex;
             gap: 8px;
         }
+
         .btn {
             padding: 6px 12px;
             border: none;
@@ -557,41 +656,50 @@
             cursor: pointer;
             font-size: 12px;
         }
+
         .btn-primary {
             background-color: #007bff;
             color: white;
         }
+
         .btn-danger {
             background-color: #dc3545;
             color: white;
         }
+
         .btn-success {
             background-color: #28a745;
             color: white;
         }
+
         .btn:hover {
             opacity: 0.9;
         }
+
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
+
         .create-quiz-form {
             background-color: white;
             padding: 20px;
             border-radius: 8px;
             margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
+
         .form-group {
             margin-bottom: 15px;
         }
+
         .form-group label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
             color: #333;
         }
+
         .form-group input,
         .form-group textarea,
         .form-group select {
@@ -601,15 +709,18 @@
             border-radius: 4px;
             font-size: 14px;
         }
+
         .form-group textarea {
             resize: vertical;
             min-height: 80px;
         }
+
         .responses-section {
             margin-top: 15px;
             padding-top: 15px;
             border-top: 1px solid #eee;
         }
+
         .response-item {
             background-color: #e9ecef;
             padding: 10px;
@@ -617,12 +728,15 @@
             border-radius: 4px;
             font-size: 12px;
         }
+
         .response-answered {
             background-color: #d4edda;
         }
+
         .response-timeout {
             background-color: #f8d7da;
         }
+
         .notification {
             position: fixed;
             top: 20px;
@@ -633,23 +747,27 @@
             z-index: 1000;
             min-width: 250px;
         }
+
         .notification.info {
             background-color: #17a2b8;
         }
+
         .notification.success {
             background-color: #28a745;
         }
+
         .notification.error {
             background-color: #dc3545;
         }
+
         .iframe-container {
             background-color: white;
             border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             min-height: 400px;
         }
-        
+
         /* Teacher Documentation Styles */
         .teacher-docs-container {
             background: #ffffff;
@@ -658,9 +776,11 @@
             box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
             min-height: 400px;
         }
+
         .teacher-docs-container.hidden {
             display: none;
         }
+
         .teacher-docs-frame {
             width: 100%;
             height: 1500px;
@@ -668,6 +788,7 @@
             border-radius: 6px;
             background-color: #ffffff;
         }
+
         .teacher-docs-placeholder {
             background: #f8f9fa;
             border-radius: 8px;
@@ -675,11 +796,12 @@
             color: #6c757d;
             min-height: 400px;
         }
+
         .teacher-docs-placeholder h3 {
             color: #495057;
             margin-top: 0;
         }
-        
+
         .status-indicator {
             display: inline-block;
             width: 8px;
@@ -687,9 +809,11 @@
             border-radius: 50%;
             margin-right: 5px;
         }
+
         .status-online {
             background-color: #28a745;
         }
+
         .sent-badge {
             display: inline-block;
             background-color: #17a2b8;
@@ -700,11 +824,13 @@
             font-weight: bold;
             margin-left: 10px;
         }
+
         .sent-info {
             font-size: 11px;
             color: #666;
             margin-top: 5px;
         }
+
         .undo-sent-btn {
             background-color: #ffc107;
             color: #000;
@@ -715,13 +841,15 @@
             cursor: pointer;
             margin-left: 10px;
         }
+
         .undo-sent-btn:hover {
             background-color: #e0a800;
         }
+
         .hidden {
             display: none;
         }
-        
+
         /* Edit Course Modal Styles */
         .modal-overlay {
             position: fixed;
@@ -735,9 +863,11 @@
             justify-content: center;
             z-index: 10000;
         }
+
         .modal-overlay.hidden {
             display: none !important;
         }
+
         .modal-content {
             background: white;
             border-radius: 12px;
@@ -746,8 +876,9 @@
             width: 90%;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
         }
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -756,10 +887,12 @@
             padding-bottom: 15px;
             border-bottom: 2px solid #e2e8f0;
         }
+
         .modal-header h2 {
             margin: 0;
             color: #1a202c;
         }
+
         .modal-close {
             background: none;
             border: none;
@@ -773,18 +906,22 @@
             align-items: center;
             justify-content: center;
         }
+
         .modal-close:hover {
             color: #2d3748;
         }
+
         .modal-form .form-row {
             margin-bottom: 20px;
         }
+
         .modal-form label {
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
             color: #2d3748;
         }
+
         .modal-form input,
         .modal-form textarea {
             width: 100%;
@@ -793,22 +930,26 @@
             border-radius: 6px;
             font-size: 14px;
         }
+
         .modal-form textarea {
             min-height: 100px;
             resize: vertical;
         }
+
         .modal-form small {
             display: block;
             margin-top: 5px;
             color: #718096;
             font-size: 12px;
         }
+
         .modal-actions {
             display: flex;
             gap: 12px;
             margin-top: 25px;
             justify-content: flex-end;
         }
+
         .modal-actions button {
             padding: 10px 24px;
             border: none;
@@ -817,21 +958,25 @@
             font-weight: 600;
             cursor: pointer;
         }
+
         .modal-actions .cancel-btn {
             background: #e2e8f0;
             color: #4a5568;
         }
+
         .modal-actions .cancel-btn:hover {
             background: #cbd5e0;
         }
+
         .modal-actions .save-btn {
             background: #2563eb;
             color: white;
         }
+
         .modal-actions .save-btn:hover {
             background: #1d4ed8;
         }
-        
+
         /* Syntax highlighted code blocks */
         pre {
             background-color: #f6f8fa;
@@ -841,14 +986,14 @@
             margin: 15px 0;
             overflow-x: auto;
         }
-        
+
         pre code {
             font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
             font-size: 13px;
             line-height: 1.5;
             display: block;
         }
-        
+
         code {
             background-color: #f6f8fa;
             border-radius: 3px;
@@ -856,7 +1001,7 @@
             font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
             font-size: 85%;
         }
-        
+
         pre code {
             background-color: transparent;
             padding: 0;
@@ -930,7 +1075,7 @@
             background: white;
             padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
         }
 
@@ -955,7 +1100,7 @@
         }
 
         .assignment-card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             border-color: #3b82f6;
         }
 
@@ -1052,7 +1197,7 @@
     </style>
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
-    
+
     <!-- Highlight.js for syntax highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -1062,11 +1207,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/arduino.min.js"></script>
 </head>
+
 <body>
     <div class="header">
         <div>
             <h1 id="appTitle">Teacher Dashboard</h1>
-            <small style="color: #aaa; font-size: 11px; display: block; margin-top: 5px;"><span id="versionInfo">Loading...</span> • <span id="buildInfo">Loading...</span></small>
+            <small style="color: #aaa; font-size: 11px; display: block; margin-top: 5px;"><span
+                    id="versionInfo">Loading...</span> • <span id="buildInfo">Loading...</span></small>
         </div>
         <div class="user-info">
             <span id="teacherName">Teacher</span>
@@ -1078,7 +1225,8 @@
     <div id="teacherLobbySection" class="teacher-lobby">
         <div>
             <h2>Course Lobby</h2>
-            <p class="lobby-intro">Create a course and share the generated passkey with your students. Selecting a course unlocks the quiz workspace.</p>
+            <p class="lobby-intro">Create a course and share the generated passkey with your students. Selecting a
+                course unlocks the quiz workspace.</p>
         </div>
 
         <form id="createCourseLobbyForm" class="course-form">
@@ -1088,19 +1236,22 @@
             </div>
             <div class="form-row">
                 <label for="lobbyCourseDescription">Description</label>
-                <textarea id="lobbyCourseDescription" maxlength="500" placeholder="Optional – add details for students"></textarea>
+                <textarea id="lobbyCourseDescription" maxlength="500"
+                    placeholder="Optional – add details for students"></textarea>
             </div>
             <div class="form-row passkey-row">
                 <div>
                     <label for="lobbyCoursePasskey">Course Passkey</label>
-                    <input type="text" id="lobbyCoursePasskey" minlength="4" maxlength="32" required placeholder="e.g. ESP32-2025">
+                    <input type="text" id="lobbyCoursePasskey" minlength="4" maxlength="32" required
+                        placeholder="e.g. ESP32-2025">
                 </div>
                 <button type="button" id="generateLobbyPasskey" class="generate-btn">Generate</button>
             </div>
             <div class="form-row">
                 <label for="lobbyDocsRepoUrl">Course Documentation Path (Optional)</label>
                 <input type="text" id="lobbyDocsRepoUrl" placeholder="/docs/esp32_basic/site/index.html">
-                <small>Local path (e.g., /docs/esp32_basic/site/index.html) or full URL (e.g., https://docs.example.com/)</small>
+                <small>Local path (e.g., /docs/esp32_basic/site/index.html) or full URL (e.g.,
+                    https://docs.example.com/)</small>
             </div>
             <div class="form-row">
                 <label for="lobbyDocsBranch">Docs Branch (for GitHub URLs)</label>
@@ -1126,147 +1277,169 @@
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn btn-success" id="exportCsvBtn" style="padding: 8px 16px;">📥 Export CSV</button>
-                <button class="btn btn-primary" id="pushAnswersBtn" style="padding: 8px 16px;">📋 Show Answers to Students</button>
-                <button class="btn btn-info" id="studentScoresBtn" style="padding: 8px 16px;">📊 View Student Scores</button>
-                <button class="btn btn-info" id="multiQuizMonitorBtn" style="padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📊 Multi-Quiz Monitor</button>
-                <button class="btn btn-info" id="viewProgressBtn" style="padding: 8px 16px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" title="Select a course first to view its progress">📈 View Progress</button>
+                <button class="btn btn-primary" id="pushAnswersBtn" style="padding: 8px 16px;">📋 Show Answers to
+                    Students</button>
+                <button class="btn btn-info" id="studentScoresBtn" style="padding: 8px 16px;">📊 View Student
+                    Scores</button>
+                <button class="btn btn-info" id="multiQuizMonitorBtn"
+                    style="padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📊
+                    Multi-Quiz Monitor</button>
+                <button class="btn btn-info" id="viewProgressBtn"
+                    style="padding: 8px 16px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"
+                    title="Select a course first to view its progress">📈 View Progress</button>
+                <button class="btn btn-primary" id="tagManagementBtn"
+                    style="padding: 8px 16px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">📋 Tag
+                    Management</button>
                 <button class="back-to-lobby-btn" id="backToTeacherLobbyBtn">Back to Lobby</button>
             </div>
         </div>
 
         <div class="main-content">
-        <div class="content-area">
-            <div class="create-quiz-form">
-                <h2>Create Quiz</h2>
-                <form id="createQuizForm">
-                    <div class="form-group">
-                        <label for="quizTitle">Title *</label>
-                        <input type="text" id="quizTitle" required>
+            <div class="content-area">
+                <div class="create-quiz-form">
+                    <h2>Create Quiz</h2>
+                    <form id="createQuizForm">
+                        <div class="form-group">
+                            <label for="quizTitle">Title *</label>
+                            <input type="text" id="quizTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="quizContent">Question/Content <small style="color: #6b7280;">(Markdown
+                                    supported)</small></label>
+                            <textarea id="quizContent"
+                                placeholder="Enter your question or content here... (Markdown supported)"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="questionType">Question Type *</label>
+                            <select id="questionType" required>
+                                <option value="text">Text Answer</option>
+                                <option value="select">Multiple Choice (Single Selection)</option>
+                                <option value="checkbox">Multiple Choice (Multiple Selection)</option>
+                            </select>
+                        </div>
+                        <div class="form-group hidden" id="optionsGroup">
+                            <label for="quizOptions">Options (one per line)</label>
+                            <textarea id="quizOptions" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+                        </div>
+                        <div class="form-group hidden" id="optionsPreviewGroup">
+                            <label>Select Correct Answer(s)</label>
+                            <div id="optionsPreview"
+                                style="background: #f9fafb; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                <!-- Options preview will be rendered here -->
+                            </div>
+                        </div>
+                        <div class="form-group" id="textAnswerGroup">
+                            <label for="correctAnswer">Correct Answer</label>
+                            <input type="text" id="correctAnswer" placeholder="Enter the correct answer for grading">
+                            <small>For text questions, enter the expected answer</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="quizCategory">Category</label>
+                            <select id="quizCategory">
+                                <option value="">No Category</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary" id="manageCategoriesBtn">Manage
+                                Categories</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="timeoutSeconds">Timeout (seconds)</label>
+                            <input type="number" id="timeoutSeconds" value="60" min="10" max="600">
+                        </div>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="isScored" checked>
+                                <span>Scored Quiz (counts toward student score)</span>
+                            </label>
+                        </div>
+                        <div class="form-group" id="pointsGroup">
+                            <label for="quizPoints">Points Value</label>
+                            <input type="number" id="quizPoints" value="1" min="0" max="100">
+                        </div>
+                        <button type="submit" class="btn btn-success">Create Quiz</button>
+                    </form>
+                </div>
+
+                <!-- Assignment Management Section -->
+                <div class="assignment-section">
+                    <div class="section-header">
+                        <h3>📝 Assignments</h3>
+                        <button class="btn btn-primary" id="createAssignmentBtn">+ Create Assignment</button>
                     </div>
-                    <div class="form-group">
-                        <label for="quizContent">Question/Content <small style="color: #6b7280;">(Markdown supported)</small></label>
-                        <textarea id="quizContent" placeholder="Enter your question or content here... (Markdown supported)"></textarea>
+                    <div id="assignmentsList" class="assignments-list">
+                        <p>No assignments created yet</p>
                     </div>
-                    <div class="form-group">
-                        <label for="questionType">Question Type *</label>
-                        <select id="questionType" required>
-                            <option value="text">Text Answer</option>
-                            <option value="select">Multiple Choice (Single Selection)</option>
-                            <option value="checkbox">Multiple Choice (Multiple Selection)</option>
-                        </select>
-                    </div>
-                    <div class="form-group hidden" id="optionsGroup">
-                        <label for="quizOptions">Options (one per line)</label>
-                        <textarea id="quizOptions" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
-                    </div>
-                    <div class="form-group hidden" id="optionsPreviewGroup">
-                        <label>Select Correct Answer(s)</label>
-                        <div id="optionsPreview" style="background: #f9fafb; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
-                            <!-- Options preview will be rendered here -->
+                </div>
+
+                <!-- Course Documentation - Full Width -->
+                <div id="teacherDocsContainer" class="teacher-docs-container">
+                    <div class="docs-header">
+                        <h3>📚 Course Documentation (LIVE)</h3>
+                        <div class="docs-controls">
+                            <button class="docs-btn" id="toggleTeacherDocsBtn">Hide Docs</button>
+                            <button class="docs-btn" id="openTeacherDocsTabBtn" title="Open in new tab">📋</button>
                         </div>
                     </div>
-                    <div class="form-group" id="textAnswerGroup">
-                        <label for="correctAnswer">Correct Answer</label>
-                        <input type="text" id="correctAnswer" placeholder="Enter the correct answer for grading">
-                        <small>For text questions, enter the expected answer</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="quizCategory">Category</label>
-                        <select id="quizCategory">
-                            <option value="">No Category</option>
-                        </select>
-                        <button type="button" class="btn btn-secondary" id="manageCategoriesBtn">Manage Categories</button>
-                    </div>
-                    <div class="form-group">
-                        <label for="timeoutSeconds">Timeout (seconds)</label>
-                        <input type="number" id="timeoutSeconds" value="60" min="10" max="600">
-                    </div>
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="isScored" checked>
-                            <span>Scored Quiz (counts toward student score)</span>
-                        </label>
-                    </div>
-                    <div class="form-group" id="pointsGroup">
-                        <label for="quizPoints">Points Value</label>
-                        <input type="number" id="quizPoints" value="1" min="0" max="100">
-                    </div>
-                    <button type="submit" class="btn btn-success">Create Quiz</button>
-                </form>
-            </div>
-
-            <!-- Assignment Management Section -->
-            <div class="assignment-section">
-                <div class="section-header">
-                    <h3>📝 Assignments</h3>
-                    <button class="btn btn-primary" id="createAssignmentBtn">+ Create Assignment</button>
-                </div>
-                <div id="assignmentsList" class="assignments-list">
-                    <p>No assignments created yet</p>
+                    <iframe id="teacherDocsFrame" class="teacher-docs-frame" src=""></iframe>
                 </div>
             </div>
 
-            <!-- Course Documentation - Full Width -->
-            <div id="teacherDocsContainer" class="teacher-docs-container">
-                <div class="docs-header">
-                    <h3>📚 Course Documentation (LIVE)</h3>
-                    <div class="docs-controls">
-                        <button class="docs-btn" id="toggleTeacherDocsBtn">Hide Docs</button>
-                        <button class="docs-btn" id="openTeacherDocsTabBtn" title="Open in new tab">📋</button>
+            <div class="sidebar">
+                <button class="sidebar-toggle" id="sidebarToggleBtn" title="Toggle Sidebar">☰</button>
+                <div class="sidebar-section">
+                    <h3>Online Students (<span id="studentCount">0</span>)</h3>
+                    <div class="online-students" id="onlineStudents">
+                        <div class="student-item">No students online</div>
                     </div>
                 </div>
-                <iframe id="teacherDocsFrame" class="teacher-docs-frame" src=""></iframe>
-            </div>
-        </div>
 
-        <div class="sidebar">
-            <button class="sidebar-toggle" id="sidebarToggleBtn" title="Toggle Sidebar">☰</button>
-            <div class="sidebar-section">
-                <h3>Online Students (<span id="studentCount">0</span>)</h3>
-                <div class="online-students" id="onlineStudents">
-                    <div class="student-item">No students online</div>
+                <div class="sidebar-section">
+                    <h3>Quiz Queue Status</h3>
+                    <div id="queueStatus">
+                        <div class="queue-item" id="activeQuiz" style="display: none;">
+                            <strong>Active:</strong> <span id="activeQuizTitle">None</span>
+                        </div>
+                        <div class="queue-item" id="queueList" style="margin-top: 10px;">
+                            <div id="queueItems">No quizzes in queue</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <div class="sidebar-section">
-                <h3>Quiz Queue Status</h3>
-                <div id="queueStatus">
-                    <div class="queue-item" id="activeQuiz" style="display: none;">
-                        <strong>Active:</strong> <span id="activeQuizTitle">None</span>
+                <div class="sidebar-section quiz-section">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">Your Quizzes</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-secondary" id="exportQuizzesBtn"
+                                style="padding: 6px 12px; font-size: 14px;">📤 Export</button>
+                            <button class="btn btn-secondary" id="importQuizzesBtn"
+                                style="padding: 6px 12px; font-size: 14px;">📥 Import</button>
+                        </div>
                     </div>
-                    <div class="queue-item" id="queueList" style="margin-top: 10px;">
-                        <div id="queueItems">No quizzes in queue</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"
+                        id="multiPushControls">
+                        <button class="btn btn-secondary" id="toggleMultiSelectBtn"
+                            style="padding: 6px 12px; font-size: 13px;">☑️ Multi-Select</button>
+                        <button class="btn btn-success" id="pushSelectedBtn"
+                            style="padding: 6px 16px; font-size: 13px; display: none;">🚀 Push Selected (<span
+                                id="selectedCount">0</span>)</button>
                     </div>
-                </div>
-            </div>
-
-            <div class="sidebar-section quiz-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3 style="margin: 0;">Your Quizzes</h3>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-secondary" id="exportQuizzesBtn" style="padding: 6px 12px; font-size: 14px;">📤 Export</button>
-                        <button class="btn btn-secondary" id="importQuizzesBtn" style="padding: 6px 12px; font-size: 14px;">📥 Import</button>
-                    </div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;" id="multiPushControls">
-                    <button class="btn btn-secondary" id="toggleMultiSelectBtn" style="padding: 6px 12px; font-size: 13px;">☑️ Multi-Select</button>
-                    <button class="btn btn-success" id="pushSelectedBtn" style="padding: 6px 16px; font-size: 13px; display: none;">🚀 Push Selected (<span id="selectedCount">0</span>)</button>
-                </div>
-                <div class="quiz-list" id="quizList">
-                    <div class="quiz-item">
-                        <p>No quizzes created yet</p>
+                    <div class="quiz-list" id="quizList">
+                        <div class="quiz-item">
+                            <p>No quizzes created yet</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    </div>
 
-    <div id="studentDetailModal" class="student-detail-modal hidden" role="dialog" aria-modal="true" aria-labelledby="studentDetailTitle">
+    <div id="studentDetailModal" class="student-detail-modal hidden" role="dialog" aria-modal="true"
+        aria-labelledby="studentDetailTitle">
         <div class="student-detail-content">
             <div class="student-detail-header">
                 <h3 id="studentDetailTitle">Student Details</h3>
-                <button type="button" class="student-detail-close" id="closeStudentDetail" aria-label="Close student details">X</button>
+                <button type="button" class="student-detail-close" id="closeStudentDetail"
+                    aria-label="Close student details">X</button>
             </div>
             <div id="studentDetailBody" class="student-detail-body"></div>
         </div>
@@ -1312,7 +1485,8 @@
             <p>Upload a JSON file containing quizzes to import:</p>
             <div style="margin: 20px 0;">
                 <input type="file" id="importFileInput" accept=".json" style="margin-bottom: 15px;">
-                <div id="importPreview" style="background: #f9fafb; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb; display: none;">
+                <div id="importPreview"
+                    style="background: #f9fafb; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb; display: none;">
                     <h4 style="margin-top: 0;">Preview:</h4>
                     <div id="importPreviewContent"></div>
                 </div>
@@ -1342,12 +1516,14 @@
                 </div>
                 <div class="form-row">
                     <label for="editCourseDescription">Description</label>
-                    <textarea id="editCourseDescription" maxlength="500" placeholder="Optional – add details for students"></textarea>
+                    <textarea id="editCourseDescription" maxlength="500"
+                        placeholder="Optional – add details for students"></textarea>
                 </div>
                 <div class="form-row">
                     <label for="editDocsRepoUrl">Course Documentation Path</label>
                     <input type="text" id="editDocsRepoUrl" placeholder="/docs/esp32_basic/site/index.html">
-                    <small>Local path (e.g., /docs/esp32_basic/site/index.html) or full URL (e.g., https://docs.example.com/)</small>
+                    <small>Local path (e.g., /docs/esp32_basic/site/index.html) or full URL (e.g.,
+                        https://docs.example.com/)</small>
                 </div>
                 <div class="form-row">
                     <label for="editDocsBranch">Documentation Branch (optional)</label>
@@ -1356,7 +1532,8 @@
                 </div>
                 <div class="form-row">
                     <label for="editCoursePasskey">Course Passkey (leave empty to keep current)</label>
-                    <input type="text" id="editCoursePasskey" minlength="4" maxlength="32" placeholder="Enter new passkey or leave empty">
+                    <input type="text" id="editCoursePasskey" minlength="4" maxlength="32"
+                        placeholder="Enter new passkey or leave empty">
                     <small>⚠️ Changing the passkey will require students to re-enroll with the new one</small>
                 </div>
                 <div class="modal-actions">
@@ -1376,21 +1553,24 @@
             </div>
             <div style="padding: 20px;">
                 <p style="margin-bottom: 20px; color: #4b5563;">Choose the export format for student data:</p>
-                
+
                 <div style="display: grid; gap: 15px;">
                     <button class="btn btn-primary" id="exportBasicBtn" style="padding: 15px; text-align: left;">
                         <strong>📊 Basic Export</strong><br>
-                        <small style="color: #6b7280;">Course, teacher, name, username, enrolled date, time spent (min), score, answers, and percentile</small>
+                        <small style="color: #6b7280;">Course, teacher, name, username, enrolled date, time spent (min),
+                            score, answers, and percentile</small>
                     </button>
-                    
+
                     <button class="btn btn-success" id="exportFullBtn" style="padding: 15px; text-align: left;">
                         <strong>📁 Full Export</strong><br>
-                        <small style="color: #6b7280;">All fields including user ID, detailed statistics, time spent (seconds), and timeout counts</small>
+                        <small style="color: #6b7280;">All fields including user ID, detailed statistics, time spent
+                            (seconds), and timeout counts</small>
                     </button>
                 </div>
-                
+
                 <div style="margin-top: 20px;">
-                    <button type="button" class="btn" id="cancelExportCsvBtn" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                    <button type="button" class="btn" id="cancelExportCsvBtn"
+                        style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
                 </div>
             </div>
         </div>
@@ -1405,23 +1585,36 @@
             </div>
             <form id="profileForm" method="post" action="#" autocomplete="off" style="padding: 20px;">
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #1f2937;">Display Name</label>
-                    <input type="text" id="profileDisplayName" class="form-input" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;" required autocomplete="name">
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #1f2937;">Display
+                        Name</label>
+                    <input type="text" id="profileDisplayName" class="form-input"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;" required
+                        autocomplete="name">
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #1f2937;">
                         Change Password <span style="color: #6b7280; font-weight: normal;">(optional)</span>
                     </label>
-                    <input type="password" id="profileCurrentPassword" class="form-input" placeholder="Current password" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 10px;" autocomplete="current-password">
-                    <input type="password" id="profileNewPassword" class="form-input" placeholder="New password (min 8 characters)" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 10px;" autocomplete="new-password">
-                    <input type="password" id="profileConfirmPassword" class="form-input" placeholder="Confirm new password" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;" autocomplete="new-password">
-                    <small style="color: #6b7280; display: block; margin-top: 5px;">Leave blank if you don't want to change your password</small>
+                    <input type="password" id="profileCurrentPassword" class="form-input" placeholder="Current password"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 10px;"
+                        autocomplete="current-password">
+                    <input type="password" id="profileNewPassword" class="form-input"
+                        placeholder="New password (min 8 characters)"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 10px;"
+                        autocomplete="new-password">
+                    <input type="password" id="profileConfirmPassword" class="form-input"
+                        placeholder="Confirm new password"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;"
+                        autocomplete="new-password">
+                    <small style="color: #6b7280; display: block; margin-top: 5px;">Leave blank if you don't want to
+                        change your password</small>
                 </div>
 
                 <div style="display: grid; gap: 10px;">
                     <button type="submit" class="btn btn-primary" style="width: 100%;">💾 Save Changes</button>
-                    <button type="button" class="btn" id="cancelProfileBtn" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                    <button type="button" class="btn" id="cancelProfileBtn"
+                        style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
                 </div>
             </form>
         </div>
@@ -1436,20 +1629,24 @@
             </div>
             <form id="assignmentForm" style="padding: 20px;">
                 <input type="hidden" id="assignmentId">
-                
+
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; font-weight: bold;">Title</label>
-                    <input type="text" id="assignmentTitle" class="form-input" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                    <input type="text" id="assignmentTitle" class="form-input" required
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
                 </div>
 
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Description (Markdown supported)</label>
-                    <textarea id="assignmentDescription" class="form-input" rows="6" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace;"></textarea>
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Description (Markdown
+                        supported)</label>
+                    <textarea id="assignmentDescription" class="form-input" rows="6"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-family: monospace;"></textarea>
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; font-weight: bold;">Deadline Type</label>
-                    <select id="deadlineType" class="form-input" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                    <select id="deadlineType" class="form-input"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
                         <option value="specific">Specific Date & Time</option>
                         <option value="duration">Duration After Opening</option>
                     </select>
@@ -1457,32 +1654,41 @@
 
                 <div id="specificDeadlineGroup" style="margin-bottom: 20px;">
                     <label style="display: block; margin-bottom: 8px; font-weight: bold;">Deadline Date & Time</label>
-                    <input type="datetime-local" id="deadlineDatetime" class="form-input" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                    <input type="datetime-local" id="deadlineDatetime" class="form-input"
+                        style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
                 </div>
 
                 <div id="durationDeadlineGroup" style="margin-bottom: 20px; display: none;">
                     <label style="display: block; margin-bottom: 8px; font-weight: bold;">Duration After Opening</label>
                     <div style="display: flex; gap: 10px;">
                         <div style="flex: 1;">
-                            <input type="number" id="deadlineHours" class="form-input" min="0" placeholder="Hours" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                            <input type="number" id="deadlineHours" class="form-input" min="0" placeholder="Hours"
+                                style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
                         </div>
                         <div style="flex: 1;">
-                            <input type="number" id="deadlineMinutes" class="form-input" min="0" max="59" placeholder="Minutes" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                            <input type="number" id="deadlineMinutes" class="form-input" min="0" max="59"
+                                placeholder="Minutes"
+                                style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
                         </div>
                     </div>
                 </div>
 
                 <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Image Attachment (optional)</label>
+                    <label style="display: block; margin-bottom: 8px; font-weight: bold;">Image Attachment
+                        (optional)</label>
                     <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <input type="file" id="assignmentImageFile" accept="image/*" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <input type="file" id="assignmentImageFile" accept="image/*"
+                            style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
                         <div id="imagePreview" style="display: none;">
-                            <img id="previewImage" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 4px; border: 1px solid #e5e7eb;">
-                            <button type="button" id="removeImageBtn" style="margin-left: 10px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 12px;">Remove</button>
+                            <img id="previewImage" src="" alt="Preview"
+                                style="max-width: 200px; max-height: 200px; border-radius: 4px; border: 1px solid #e5e7eb;">
+                            <button type="button" id="removeImageBtn"
+                                style="margin-left: 10px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; font-size: 12px;">Remove</button>
                         </div>
                         <div id="uploadProgress" style="display: none;">
                             <div style="background: #e5e7eb; border-radius: 4px; overflow: hidden;">
-                                <div id="progressBar" style="background: #3b82f6; height: 8px; width: 0%; transition: width 0.3s;"></div>
+                                <div id="progressBar"
+                                    style="background: #3b82f6; height: 8px; width: 0%; transition: width 0.3s;"></div>
                             </div>
                             <small id="uploadStatus" style="color: #6b7280;">Uploading...</small>
                         </div>
@@ -1499,7 +1705,8 @@
 
                 <div style="display: grid; gap: 10px;">
                     <button type="submit" class="btn btn-primary" style="width: 100%;">💾 Save Assignment</button>
-                    <button type="button" class="btn" id="cancelAssignmentBtn" style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
+                    <button type="button" class="btn" id="cancelAssignmentBtn"
+                        style="width: 100%; background: #e5e7eb; color: #374151;">Cancel</button>
                 </div>
             </form>
         </div>
@@ -1519,4 +1726,5 @@
     </div>
 
 </body>
+
 </html>

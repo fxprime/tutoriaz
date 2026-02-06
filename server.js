@@ -739,8 +739,8 @@ app.use((req, res, next) => {
 // CORS - keep default permissive for now (adjust in production)
 app.use(cors());
 // Limit JSON body size to mitigate large payload abuse
-app.use(express.json({ limit: '8kb' }));
-app.use(express.urlencoded({ extended: false, limit: '8kb' }));
+app.use(express.json({ limit: '200kb' }));
+app.use(express.urlencoded({ extended: false, limit: '200kb' }));
 app.use(express.static('public'));
 
 // Rate limiter for auth endpoints (login / register)
@@ -1306,7 +1306,7 @@ async function getCurrentQuizForStudent(userId, courseId = null) {
 
         const params = courseId ? [userId, courseId] : [userId];
 
-        db.get(query, params, (err, row) => {
+        db.get(query, params, async (err, row) => {
             if (err) {
                 reject(err);
             } else {
@@ -1316,6 +1316,37 @@ async function getCurrentQuizForStudent(userId, courseId = null) {
                         mapped.timeout_seconds,
                         mapped.first_viewed_at
                     );
+
+                    // Filter out expired quizzes (remaining_seconds <= 0)
+                    if (mapped.remaining_seconds <= 0) {
+                        console.log(`[FILTER] Quiz ${mapped.push_id} has expired (remaining: ${mapped.remaining_seconds}s), marking as removed`);
+
+                        // Mark as removed in database
+                        try {
+                            await new Promise((resolveUpdate, rejectUpdate) => {
+                                db.run(
+                                    `UPDATE student_quiz_queue SET status = 'removed' WHERE id = ?`,
+                                    [mapped.queue_id],
+                                    (updateErr) => {
+                                        if (updateErr) {
+                                            console.error('Error marking quiz as removed:', updateErr);
+                                            rejectUpdate(updateErr);
+                                        } else {
+                                            console.log(`[FILTER] Marked quiz ${mapped.push_id} as removed in database`);
+                                            resolveUpdate();
+                                        }
+                                    }
+                                );
+                            });
+                        } catch (updateError) {
+                            console.error('Failed to update expired quiz:', updateError);
+                        }
+
+                        // Return null so this quiz is not shown
+                        resolve(null);
+                        return;
+                    }
+
                     if (mapped.push_id) {
                         schedulePushTimeoutCheck(mapped.push_id).catch((error) => {
                             console.error('schedulePushTimeoutCheck error:', error);
@@ -1349,15 +1380,56 @@ async function getPendingQuizzesForStudent(userId, courseId = null) {
 
         const params = courseId ? [userId, courseId] : [userId];
 
-        db.all(query, params, (err, rows) => {
+        db.all(query, params, async (err, rows) => {
             if (err) {
                 reject(err);
             } else {
-                const pending = rows.map(row => {
+                const pending = [];
+                const expiredQueueIds = [];
+
+                for (const row of rows) {
                     const mapped = mapQueueRow(row);
-                    mapped.remaining_seconds = mapped.timeout_seconds;
-                    return mapped;
-                });
+
+                    // Check if quiz would be expired if promoted now
+                    // For auto-triggered quizzes that were added long ago, check from added_at
+                    const remainingFromAdded = computeRemainingSeconds(
+                        mapped.timeout_seconds,
+                        mapped.added_at
+                    );
+
+                    if (remainingFromAdded <= 0) {
+                        console.log(`[FILTER] Pending quiz ${mapped.push_id} has expired (added ${mapped.added_at}, timeout ${mapped.timeout_seconds}s), will mark as removed`);
+                        expiredQueueIds.push(mapped.queue_id);
+                    } else {
+                        mapped.remaining_seconds = mapped.timeout_seconds;
+                        pending.push(mapped);
+                    }
+                }
+
+                // Mark expired quizzes as removed in database
+                if (expiredQueueIds.length > 0) {
+                    try {
+                        const placeholders = expiredQueueIds.map(() => '?').join(',');
+                        await new Promise((resolveUpdate, rejectUpdate) => {
+                            db.run(
+                                `UPDATE student_quiz_queue SET status = 'removed' WHERE id IN (${placeholders})`,
+                                expiredQueueIds,
+                                (updateErr) => {
+                                    if (updateErr) {
+                                        console.error('Error marking pending quizzes as removed:', updateErr);
+                                        rejectUpdate(updateErr);
+                                    } else {
+                                        console.log(`[FILTER] Marked ${expiredQueueIds.length} pending quiz(es) as removed`);
+                                        resolveUpdate();
+                                    }
+                                }
+                            );
+                        });
+                    } catch (updateError) {
+                        console.error('Failed to update expired pending quizzes:', updateError);
+                    }
+                }
+
                 resolve(pending);
             }
         });
@@ -4330,6 +4402,45 @@ app.post('/api/cleanup-orphaned-quizzes', authenticateToken, async (req, res) =>
 
             totalRemoved += queueRemoved;
 
+            // Delete quiz queue entries that have been removed (expired quizzes)
+            const expiredRemoved = await new Promise((resolve, reject) => {
+                db.run(
+                    `DELETE FROM student_quiz_queue 
+                     WHERE user_id = ? 
+                     AND status = 'removed'`,
+                    [req.user.userId],
+                    function (err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.changes);
+                        }
+                    }
+                );
+            });
+
+            totalRemoved += expiredRemoved;
+
+            // Delete quiz queue entries that have been answered or timed out long ago
+            const oldAnsweredRemoved = await new Promise((resolve, reject) => {
+                db.run(
+                    `DELETE FROM student_quiz_queue 
+                     WHERE user_id = ? 
+                     AND status IN ('answered', 'timeout')
+                     AND datetime(added_at) < datetime('now', '-1 day')`,
+                    [req.user.userId],
+                    function (err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.changes);
+                        }
+                    }
+                );
+            });
+
+            totalRemoved += oldAnsweredRemoved;
+
             // Delete quiz responses where the quiz no longer exists
             const responsesRemoved = await new Promise((resolve, reject) => {
                 db.run(
@@ -7002,6 +7113,465 @@ app.delete('/api/assignments/:assignmentId', authenticateToken, async (req, res)
 
 // ==================== END ASSIGNMENT ROUTES ====================
 
+// ==================== TAG MANAGEMENT ROUTES ====================
+
+/**
+ * GET /api/courses/:courseId/tags/scan
+ * Scan course documentation and extract all data-progress-section tags
+ * Organizes tags by chapter hierarchy
+ */
+app.get('/api/courses/:courseId/tags/scan', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { courseId } = req.params;
+
+        // Verify course exists and teacher has access
+        const course = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT * FROM courses WHERE id = ?',
+                [courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!course) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+
+        if (course.created_by !== req.user.userId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Determine course docs directory using the docs_path from database
+        // The docs_path points to the documentation URL path (e.g., /docs/uno_watering_tutorial/site/)
+        // We need to find the corresponding file system path
+        let docsPath = null;
+        let courseDirectoryName = null;
+
+        if (course.docs_path) {
+            // Extract the course directory name from docs_path
+            // e.g., /docs/uno_watering_tutorial/site/ -> uno_watering_tutorial
+            const pathMatch = course.docs_path.match(/\/docs\/([^\/]+)\//);
+            if (pathMatch) {
+                courseDirectoryName = pathMatch[1];
+                const potentialSitePath = path.join(__dirname, 'courses', courseDirectoryName, 'site');
+
+                if (fs.existsSync(potentialSitePath)) {
+                    const siteIndexPath = path.join(potentialSitePath, 'index.html');
+                    if (fs.existsSync(siteIndexPath)) {
+                        docsPath = potentialSitePath;
+                        console.log(`[Tag Scanner] Found site directory for course ${courseId} (${course.title}): ${path.relative(__dirname, docsPath)}`);
+                    }
+                }
+            }
+        }
+
+        // If docs_path doesn't exist or directory not found, search all course directories
+        // and use the one that matches the course title (best guess)
+        if (!docsPath) {
+            console.log(`[Tag Scanner] Course docs_path not set or invalid (docs_path: ${course.docs_path})`);
+            console.log(`[Tag Scanner] Searching for course "${course.title}" (${courseId})...`);
+
+            const coursesDir = path.join(__dirname, 'courses');
+            if (fs.existsSync(coursesDir)) {
+                const courseDirs = fs.readdirSync(coursesDir);
+                console.log(`[Tag Scanner] Available course directories:`, courseDirs);
+
+                // Try to match by title similarity
+                for (const dir of courseDirs) {
+                    const potentialSitePath = path.join(coursesDir, dir, 'site');
+                    if (fs.existsSync(potentialSitePath)) {
+                        const siteIndexPath = path.join(potentialSitePath, 'index.html');
+                        if (fs.existsSync(siteIndexPath)) {
+                            // Check if directory name appears in course title or vice versa
+                            const dirLower = dir.toLowerCase().replace(/[_-]/g, ' ');
+                            const titleLower = course.title.toLowerCase();
+
+                            if (titleLower.includes(dirLower) || dirLower.includes(titleLower.substring(0, 10))) {
+                                docsPath = potentialSitePath;
+                                console.log(`[Tag Scanner] Matched directory "${dir}" to course "${course.title}"`);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // If still no match, use the first available site directory and warn
+                if (!docsPath) {
+                    for (const dir of courseDirs) {
+                        const potentialSitePath = path.join(coursesDir, dir, 'site');
+                        if (fs.existsSync(potentialSitePath)) {
+                            const siteIndexPath = path.join(potentialSitePath, 'index.html');
+                            if (fs.existsSync(siteIndexPath)) {
+                                docsPath = potentialSitePath;
+                                console.warn(`[Tag Scanner] ⚠️  No match found! Using first available: ${dir}`);
+                                console.warn(`[Tag Scanner] ⚠️  This may be the wrong course! Update the course docs_path field.`);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!docsPath) {
+            return res.status(404).json({
+                error: 'Course documentation site not found. Make sure to build the docs first.',
+                docs_path: course.docs_path,
+                courseId: courseId,
+                courseTitle: course.title
+            });
+        }
+
+        // Recursively scan for HTML files with data-progress-section attributes
+        const tags = [];
+        const chapters = {};
+
+        function scanDirectory(dir) {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+            for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+
+                if (entry.isDirectory()) {
+                    scanDirectory(fullPath);
+                } else if (entry.name.endsWith('.html')) {
+                    try {
+                        const content = fs.readFileSync(fullPath, 'utf8');
+
+                        // Match data-progress-section attributes
+                        const regex = /data-progress-section=["']([^"']+)["'][^>]*(?:data-progress-title=["']([^"']+)["'])?/g;
+                        let match;
+
+                        while ((match = regex.exec(content)) !== null) {
+                            const sectionId = match[1];
+                            const sectionTitle = match[2] || sectionId;
+
+                            // Extract chapter ID from section ID (e.g., "06-objectives" -> "06")
+                            const chapterMatch = sectionId.match(/^(\d+)-/);
+                            const chapterId = chapterMatch ? chapterMatch[1] : 'general';
+
+                            tags.push({
+                                sectionId,
+                                sectionTitle,
+                                chapterId,
+                                sourceFile: path.relative(docsPath, fullPath)
+                            });
+
+                            // Organize by chapter
+                            if (!chapters[chapterId]) {
+                                chapters[chapterId] = {
+                                    chapterId,
+                                    chapterName: `Chapter ${chapterId}`,
+                                    tags: []
+                                };
+                            }
+
+                            chapters[chapterId].tags.push({
+                                sectionId,
+                                sectionTitle,
+                                sourceFile: path.relative(docsPath, fullPath)
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`Error reading file ${fullPath}:`, error);
+                    }
+                }
+            }
+        }
+
+        scanDirectory(docsPath);
+
+        res.json({
+            success: true,
+            courseId,
+            docsPath: path.relative(__dirname, docsPath),
+            totalTags: tags.length,
+            tags,
+            chapters: Object.values(chapters)
+        });
+
+    } catch (error) {
+        console.error('Tag scan error:', error);
+        res.status(500).json({ error: 'Failed to scan tags' });
+    }
+});
+
+/**
+ * GET /api/courses/:courseId/tags
+ * Get all tags for a course with current quiz assignments
+ */
+app.get('/api/courses/:courseId/tags', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { courseId } = req.params;
+
+        // Verify course access
+        const course = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT created_by FROM courses WHERE id = ?',
+                [courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!course || course.created_by !== req.user.userId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Get all course sections with quiz assignments
+        const sections = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT 
+                    cs.*,
+                    q.title as quiz_title
+                FROM course_sections cs
+                LEFT JOIN quizzes q ON cs.quiz_id = q.id
+                WHERE cs.course_id = ?
+                ORDER BY cs.chapter_id, cs.section_order, cs.section_id`,
+                [courseId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+
+        // Organize by chapter
+        const chapters = {};
+        sections.forEach(section => {
+            const chapterId = section.chapter_id || 'general';
+
+            if (!chapters[chapterId]) {
+                chapters[chapterId] = {
+                    chapterId,
+                    tags: []
+                };
+            }
+
+            chapters[chapterId].tags.push({
+                sectionId: section.section_id,
+                sectionTitle: section.section_title,
+                isQuizTrigger: section.is_quiz_trigger === 1,
+                quizId: section.quiz_id,
+                quizTitle: section.quiz_title
+            });
+        });
+
+        res.json({
+            success: true,
+            courseId,
+            chapters: Object.values(chapters),
+            totalSections: sections.length
+        });
+
+    } catch (error) {
+        console.error('Get tags error:', error);
+        res.status(500).json({ error: 'Failed to retrieve tags' });
+    }
+});
+
+/**
+ * PUT /api/courses/:courseId/tags/:sectionId/quiz
+ * Assign or remove quiz trigger for a specific section tag
+ */
+app.put('/api/courses/:courseId/tags/:sectionId/quiz', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'teacher') {
+            return res.status(403).json({ error: 'Teacher access required' });
+        }
+
+        const { courseId, sectionId } = req.params;
+        const { quizId, enabled } = req.body; // enabled: boolean, quizId: string or null
+
+        // Verify course access
+        const course = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT created_by FROM courses WHERE id = ?',
+                [courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!course || course.created_by !== req.user.userId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Verify quiz exists if quizId provided
+        if (quizId) {
+            const quiz = await new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT id FROM quizzes WHERE id = ? AND course_id = ?',
+                    [quizId, courseId],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    }
+                );
+            });
+
+            if (!quiz) {
+                return res.status(404).json({ error: 'Quiz not found in this course' });
+            }
+        }
+
+        // Update or insert course_section record
+        const isQuizTrigger = enabled ? 1 : 0;
+        const finalQuizId = enabled ? quizId : null;
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO course_sections (id, course_id, section_id, section_title, is_quiz_trigger, quiz_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(course_id, section_id) DO UPDATE SET
+                    is_quiz_trigger = excluded.is_quiz_trigger,
+                    quiz_id = excluded.quiz_id`,
+                [uuidv4(), courseId, sectionId, sectionId, isQuizTrigger, finalQuizId],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+
+        res.json({
+            success: true,
+            message: enabled ? 'Quiz trigger enabled' : 'Quiz trigger disabled',
+            sectionId,
+            isQuizTrigger,
+            quizId: finalQuizId
+        });
+
+    } catch (error) {
+        console.error('Update quiz trigger error:', error);
+        res.status(500).json({ error: 'Failed to update quiz trigger' });
+    }
+});
+
+// ==================== END TAG MANAGEMENT ROUTES ====================
+
+// ==================== AUTO-TRIGGER QUIZ ENDPOINT ====================
+
+/**
+ * POST /api/auto-trigger-quiz
+ * Register an automatically triggered quiz (from progress tracker)
+ * Creates a quiz_push record so the answer can be submitted
+ */
+app.post('/api/auto-trigger-quiz', authenticateToken, async (req, res) => {
+    try {
+        const { quizId, courseId, sectionId, pushId } = req.body;
+        const userId = req.user.userId;
+
+        if (!quizId || !courseId || !pushId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Verify quiz exists
+        const quiz = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT * FROM quizzes WHERE id = ? AND course_id = ?',
+                [quizId, courseId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+
+        // Create quiz push record
+        const now = new Date().toISOString();
+        const timeoutSeconds = quiz.timeout_seconds || 60;
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO quiz_pushes (
+                    id, quiz_id, pushed_by, pushed_at, timeout_seconds, 
+                    target_scope, course_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [pushId, quizId, userId, now, timeoutSeconds, JSON.stringify([userId]), courseId],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+
+        // Add to student's queue
+        const queueId = `queue-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT INTO student_quiz_queue (
+                    id, user_id, push_id, quiz_id, course_id, added_at, status
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+                [queueId, userId, pushId, quizId, courseId, now],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+
+        // Add to activePushes Map so answer submission works
+        activePushes.set(pushId, {
+            id: pushId,
+            quiz_id: quizId,
+            course_id: courseId,
+            quiz: quiz,
+            target: {
+                type: 'specific',
+                userIds: [userId]
+            },
+            pushed_at: now,
+            pushed_by: userId,
+            timeout_seconds: timeoutSeconds,
+            auto_triggered: true,
+            section_id: sectionId
+        });
+
+        res.json({
+            success: true,
+            pushId,
+            quiz: {
+                id: quiz.id,
+                title: quiz.title,
+                content_text: quiz.content_text,
+                question_type: quiz.question_type,
+                timeout_seconds: quiz.timeout_seconds,
+                options: quiz.options ? JSON.parse(quiz.options) : [],
+                correct_answer: quiz.correct_answer,
+                is_scored: quiz.is_scored,
+                points: quiz.points
+            }
+        });
+    } catch (error) {
+        console.error('Auto-trigger quiz error:', error);
+        console.error('Error stack:', error.stack);
+        console.error('Request body:', req.body);
+        res.status(500).json({ error: 'Failed to trigger quiz', details: error.message });
+    }
+});
+
+// ==================== END AUTO-TRIGGER QUIZ ENDPOINT ====================
+
 // ==================== READING PROGRESS TRACKING ROUTES ====================
 
 /**
@@ -7115,12 +7685,44 @@ app.post('/api/progress', async (req, res) => {
                 );
             });
 
+            // Check if this section should trigger a quiz
+            let triggerQuiz = false;
+            let quizData = null;
+
+            if (trigger && trigger.sectionId) {
+                const quizTrigger = await new Promise((resolve, reject) => {
+                    db.get(
+                        `SELECT cs.*, q.*
+                        FROM course_sections cs
+                        LEFT JOIN quizzes q ON cs.quiz_id = q.id
+                        WHERE cs.course_id = ? AND cs.section_id = ? AND cs.is_quiz_trigger = 1`,
+                        [courseId, trigger.sectionId],
+                        (err, row) => {
+                            if (err) reject(err);
+                            else resolve(row);
+                        }
+                    );
+                });
+
+                if (quizTrigger && quizTrigger.id) {
+                    triggerQuiz = true;
+                    quizData = {
+                        quizId: quizTrigger.id,
+                        title: quizTrigger.title,
+                        questionType: quizTrigger.question_type,
+                        timeoutSeconds: quizTrigger.timeout_seconds
+                    };
+                }
+            }
+
             res.json({
                 success: true,
                 progress: {
                     overall: progress.overall,
                     chaptersCount: Object.keys(progress.chapters).length
-                }
+                },
+                triggerQuiz,
+                quizData
             });
 
         } else {

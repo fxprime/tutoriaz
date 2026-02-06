@@ -136,17 +136,107 @@ When teachers add a new course through the web interface:
 
 ## 7. Database Operations
 
+**CRITICAL: All schema changes MUST be in migration files**
+
 - **Never** directly modify `database.sqlite`
-- Use migration scripts in `migrations/` directory
-- Check `schema.sql` for database structure
-- Server auto-creates tables on startup if missing
+- **Always** create migration files in `migrations/` directory for schema changes
+- **Why**: Database wipes (via `init-db.sh` or `npm run bootstrap`) must rebuild schema automatically
+- Migration files ensure schema persists across database resets without manual intervention
+
+### Migration Workflow:
+
+1. Create numbered migration file: `migrations/###_description.sql`
+2. Schema changes are automatically applied by `bootstrapDemo.js`
+3. Database wipes will include all migrations - no manual reapplication needed
+
+### Files to Check:
+
+- `schema.sql` - Base database structure
+- `migrations/` - Sequential schema modifications
+- `scripts/bootstrapDemo.js` - Applies schema + migrations on database init
 
 ## 8. Security Considerations
 
-- Content Security Policy (CSP) enforced
-- Path-based CSP: strict for main app, relaxed for `/docs/`
+### Content Security Policy (CSP)
+
+**CRITICAL: This application enforces strict Content Security Policy - inline scripts are BLOCKED**
+
+#### CSP Configuration:
+
+- **Main Application**: `script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com`
+- **Documentation Routes** (`/docs/*`): Relaxed CSP for embedded content
+- **NO inline scripts allowed** in main application HTML files
+
+#### Rules for Adding JavaScript:
+
+1. **NEVER use inline `<script>` tags with code**
+   ```html
+   <!-- ❌ BAD - Will be blocked by CSP -->
+   <script>
+       document.getElementById('btn').addEventListener('click', () => {
+           alert('Hello');
+       });
+   </script>
+   ```
+
+2. **ALWAYS use external JavaScript files**
+   ```html
+   <!-- ✅ GOOD - External file -->
+   <script src="/my-script.js"></script>
+   ```
+
+3. **For event handlers in HTML files:**
+   - Add them in the external JavaScript file using `addEventListener`
+   - Use `DOMContentLoaded` to ensure DOM is ready
+   - Reference elements by ID
+
+   ```javascript
+   // In external .js file
+   document.addEventListener('DOMContentLoaded', function() {
+       const btn = document.getElementById('myButton');
+       if (btn) {
+           btn.addEventListener('click', function() {
+               alert('Hello');
+           });
+       }
+   });
+   ```
+
+4. **Existing external files to use:**
+   - `/teacher.js` - Teacher dashboard functionality
+   - `/student.js` - Student dashboard functionality  
+   - Add new files to `/public/` directory as needed
+
+#### Common CSP Violations to Avoid:
+
+```html
+<!-- ❌ All of these will be BLOCKED -->
+<script>console.log('test');</script>
+<button onclick="handleClick()">Click</button>
+<div onload="doSomething()">Content</div>
+<a href="javascript:void(0)">Link</a>
+```
+
+```html
+<!-- ✅ Correct alternatives -->
+<script src="/my-handlers.js"></script>
+<button id="myButton">Click</button>
+<!-- Event handler added in external .js via addEventListener -->
+```
+
+#### Before Writing Any HTML with JavaScript:
+
+1. **Check for existing external .js files** that handle that page
+2. **Add handlers there** instead of inline
+3. **Use DOMContentLoaded** to wait for DOM
+4. **Test in browser console** for CSP errors before committing
+
+### Other Security Features:
+
 - JWT authentication for API endpoints
 - bcrypt for password hashing
+- Input validation and sanitization
+- XSS protection via helmet.js
 
 ## 9. Environment Variables and Configuration
 
@@ -256,6 +346,7 @@ Before running ANY command, ask yourself:
 - [ ] Am I starting the server? Should I use `./start.sh`?
 - [ ] Am I creating a script? Did I check and use `.env` variables?
 - [ ] Will this command change directories? Do I need to return to the original location?
+- [ ] **Am I adding JavaScript to HTML? Did I avoid inline scripts (CSP violation)?**
 
 ## Emergency Recovery
 
