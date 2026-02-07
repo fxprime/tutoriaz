@@ -74,11 +74,20 @@ if [ -f ".gitmodules" ]; then
     # Update each submodule with proper branch detection
     git submodule foreach '
         git fetch origin 2>/dev/null
+        # Determine the default branch
         if git ls-remote --heads origin main 2>/dev/null | grep -q main; then
-            git pull origin main 2>/dev/null || true
+            BRANCH="main"
         elif git ls-remote --heads origin master 2>/dev/null | grep -q master; then
-            git pull origin master 2>/dev/null || true
+            BRANCH="master"
+        else
+            BRANCH="main"  # fallback
         fi
+        
+        # Checkout the branch first to avoid detached HEAD
+        git checkout $BRANCH 2>/dev/null || git checkout -b $BRANCH origin/$BRANCH 2>/dev/null || true
+        
+        # Pull latest changes
+        git pull origin $BRANCH 2>/dev/null || true
     ' 2>/dev/null || log_info "Note: Could not update some submodules"
     
     log_success "Course repositories updated"

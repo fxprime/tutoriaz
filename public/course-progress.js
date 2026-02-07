@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get course ID from URL
     const urlParams = new URLSearchParams(window.location.search);
     courseId = urlParams.get('courseId');
-    
+
     if (!courseId) {
         alert('No course ID provided');
         window.location.href = '/teacher.html';
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Set up filters
     document.getElementById('search-input').addEventListener('input', filterStudents);
     document.getElementById('progress-filter').addEventListener('change', filterStudents);
-    
+
     // Set up button event listeners
     document.getElementById('backBtn').addEventListener('click', goBack);
     document.getElementById('exportBtn').addEventListener('click', exportProgress);
@@ -57,15 +57,15 @@ async function loadProgress() {
     try {
         console.log('Loading progress for course:', courseId);
         console.log('Token exists:', !!token);
-        
+
         const response = await fetch(`/api/courses/${courseId}/progress`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         });
-        
+
         console.log('Response status:', response.status);
-        
+
         if (!response.ok) {
             const errorData = await response.json();
             console.error('API Error:', errorData);
@@ -75,10 +75,10 @@ async function loadProgress() {
         const data = await response.json();
         console.log('Progress data loaded:', data);
         allStudents = data.students || [];
-        
+
         updateStats(allStudents);
         renderTable(allStudents);
-        
+
         // Show helpful tip if no students or no progress data
         if (allStudents.length === 0) {
             showInfoBanner('No students enrolled yet. Students need to enroll in this course first.', 'info');
@@ -109,7 +109,7 @@ function showInfoBanner(message, type = 'info') {
         warning: { bg: '#ffebee', border: '#f44336', text: '#c62828' }
     };
     const style = colors[type] || colors.info;
-    
+
     const banner = document.createElement('div');
     banner.style.cssText = `
         background: ${style.bg};
@@ -121,18 +121,18 @@ function showInfoBanner(message, type = 'info') {
         font-size: 14px;
     `;
     banner.innerHTML = message;
-    
+
     const container = document.querySelector('.progress-table');
     container.insertBefore(banner, container.firstChild);
 }
 
 function updateStats(students) {
     const totalStudents = students.length;
-    const avgProgress = totalStudents > 0 
-        ? students.reduce((sum, s) => sum + s.progress.percentage, 0) / totalStudents 
+    const avgProgress = totalStudents > 0
+        ? students.reduce((sum, s) => sum + s.progress.percentage, 0) / totalStudents
         : 0;
     const completed = students.filter(s => s.progress.percentage >= 100).length;
-    
+
     // Active this week (accessed in last 7 days)
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -201,7 +201,7 @@ function renderTable(students) {
     `;
 
     document.getElementById('table-container').innerHTML = html;
-    
+
     // Add event delegation for student rows
     document.querySelectorAll('.student-row').forEach(row => {
         row.addEventListener('click', () => {
@@ -217,8 +217,8 @@ function filterStudents() {
 
     let filtered = allStudents.filter(student => {
         const matchesSearch = student.displayName.toLowerCase().includes(searchTerm) ||
-                            student.username.toLowerCase().includes(searchTerm);
-        
+            student.username.toLowerCase().includes(searchTerm);
+
         let matchesProgress = true;
         if (progressFilter === 'completed') {
             matchesProgress = student.progress.percentage >= 100;
@@ -237,7 +237,7 @@ function filterStudents() {
 async function showStudentDetails(userId) {
     const modal = document.getElementById('student-modal');
     const student = allStudents.find(s => s.userId === userId);
-    
+
     document.getElementById('modal-student-name').textContent = `${student.displayName} (@${student.username})`;
     document.getElementById('modal-content').innerHTML = `
         <div class="loading">
@@ -245,7 +245,7 @@ async function showStudentDetails(userId) {
             <p>Loading details...</p>
         </div>
     `;
-    
+
     modal.style.display = 'block';
 
     try {
@@ -254,25 +254,25 @@ async function showStudentDetails(userId) {
                 'Authorization': `Bearer ${token}`
             }
         });
-        
+
         if (!response.ok) {
             throw new Error(`Failed to load details: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        
+
         // Calculate completion rate and estimated completion
         const completedCount = data.sections.filter(s => s.is_completed).length;
         const totalSections = data.sections.length;
         const completionRate = totalSections > 0 ? (completedCount / totalSections * 100) : 0;
-        
+
         // Group sections by completion status
         const completedSections = data.sections.filter(s => s.is_completed);
         const incompleteSections = data.sections.filter(s => !s.is_completed);
-        
+
         // Calculate total time spent
         const totalTimeSeconds = completedSections.reduce((sum, s) => sum + (s.time_spent_seconds || 0), 0);
-        
+
         // Generate sections HTML with grouping
         const sectionsHtml = `
             ${completedSections.length > 0 ? `
@@ -280,11 +280,17 @@ async function showStudentDetails(userId) {
                     <h4 style="color: #4caf50; margin-bottom: 12px;">
                         ✓ Completed (${completedSections.length})
                     </h4>
-                    ${completedSections.map(section => `
+                    ${completedSections.map(section => {
+            const chapterName = getChapterFromSectionId(section.section_id);
+            const displayTitle = chapterName
+                ? `<span style="color: #667eea; font-weight: 600;">${escapeHtml(chapterName)}</span> • ${escapeHtml(section.section_title || section.section_id)}`
+                : escapeHtml(section.section_title || section.section_id);
+
+            return `
                         <div class="section-item">
                             <div class="section-status completed">✓</div>
                             <div class="section-info">
-                                <div class="section-title">${escapeHtml(section.section_title || section.section_id)}</div>
+                                <div class="section-title">${displayTitle}</div>
                                 <div class="section-meta">
                                     Completed: ${formatDate(section.completed_at)} • 
                                     Time: ${formatTime(section.time_spent_seconds || 0)}
@@ -292,7 +298,8 @@ async function showStudentDetails(userId) {
                                 </div>
                             </div>
                         </div>
-                    `).join('')}
+                    `;
+        }).join('')}
                 </div>
             ` : ''}
             
@@ -301,18 +308,25 @@ async function showStudentDetails(userId) {
                     <h4 style="color: #ff9800; margin-bottom: 12px;">
                         ⏳ Not Completed Yet (${incompleteSections.length})
                     </h4>
-                    ${incompleteSections.map(section => `
+                    ${incompleteSections.map(section => {
+            const chapterName = getChapterFromSectionId(section.section_id);
+            const displayTitle = chapterName
+                ? `<span style="color: #667eea; font-weight: 600;">${escapeHtml(chapterName)}</span> • ${escapeHtml(section.section_title || section.section_id)}`
+                : escapeHtml(section.section_title || section.section_id);
+
+            return `
                         <div class="section-item">
                             <div class="section-status incomplete"></div>
                             <div class="section-info">
-                                <div class="section-title">${escapeHtml(section.section_title || section.section_id)}</div>
+                                <div class="section-title">${displayTitle}</div>
                                 <div class="section-meta">
                                     Not started
                                     ${section.page_url ? ` • <a href="${section.page_url}" target="_blank" style="color: #667eea;">View Section</a>` : ''}
                                 </div>
                             </div>
                         </div>
-                    `).join('')}
+                    `;
+        }).join('')}
                 </div>
             ` : ''}
         `;
@@ -414,7 +428,7 @@ function goBack() {
 function exportProgress() {
     // Create CSV content
     let csv = 'Student,Username,Progress %,Completed Sections,Total Sections,Time Spent (mins),Last Accessed\n';
-    
+
     allStudents.forEach(student => {
         csv += `"${student.displayName}","${student.username}",${student.progress.percentage},${student.progress.completedSections},${student.progress.totalSections},${Math.round(student.progress.totalTimeSpent / 60)},"${student.progress.lastAccessedAt || 'Never'}"\n`;
     });
@@ -433,7 +447,7 @@ function formatTime(seconds) {
     if (!seconds || seconds === 0) return '0m';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    
+
     if (hours > 0) {
         return `${hours}h ${minutes}m`;
     }
@@ -464,8 +478,36 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getPageNameFromUrl(pageUrl) {
+    if (!pageUrl) return null;
+    // Extract filename from URL (e.g., "/docs/course/site/01-intro/" -> "01-intro")
+    const match = pageUrl.match(/\/([^\/]+)\/?$/);
+    if (match && match[1] && match[1] !== 'site') {
+        return match[1].replace(/\.html?$/, '');
+    }
+    return null;
+}
+
+function getChapterFromSectionId(sectionId) {
+    if (!sectionId) return null;
+    // Extract chapter number from section_id (e.g., "07-objectives" -> "Chapter 07")
+    // or "overview-intro" -> "Overview"
+    const match = sectionId.match(/^(\d+)-/);
+    if (match && match[1]) {
+        return `Chapter ${match[1]}`;
+    }
+    // Handle special cases like "overview-intro"
+    if (sectionId.startsWith('overview-')) {
+        return 'Overview';
+    }
+    if (sectionId.startsWith('appendix-')) {
+        return 'Appendix';
+    }
+    return null;
+}
+
 // Close modal when clicking outside
-window.onclick = function(event) {
+window.onclick = function (event) {
     const modal = document.getElementById('student-modal');
     if (event.target === modal) {
         closeModal();

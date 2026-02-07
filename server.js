@@ -288,7 +288,7 @@ async function buildMkDocsSite(repoFolderName, onProgress = null) {
 }
 
 // Helper function to clone git repository as submodule
-async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
+async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null, branch = 'main') {
     try {
         const coursesDir = path.join(__dirname, 'courses');
 
@@ -332,7 +332,7 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
 
             // Use git submodule add if in a git repo, otherwise fall back to regular clone
             const gitArgs = isGitRepo
-                ? ['submodule', 'add', '--progress', gitUrl, `courses/${repoFolderName}`]
+                ? ['submodule', 'add', '-b', branch, '--progress', gitUrl, `courses/${repoFolderName}`]
                 : ['clone', '--depth', '1', '--progress', gitUrl, repoPath];
 
             const gitProcess = spawn('git', gitArgs, {
@@ -406,9 +406,9 @@ async function cloneGitRepoAsSubmodule(gitUrl, targetDir, onProgress = null) {
 
         // If not using git submodule add (not in git repo), manually add to .gitmodules
         if (!isGitRepo) {
-            addToGitmodules(gitUrl, repoFolderName, 'main');
+            addToGitmodules(gitUrl, repoFolderName, branch);
         } else {
-            console.log(`Successfully added courses/${repoFolderName} as git submodule`);
+            console.log(`Successfully added courses/${repoFolderName} as git submodule with branch ${branch}`);
         }
 
         // Read site_url from mkdocs.yml
@@ -2602,7 +2602,8 @@ app.post('/api/courses', authenticateToken, async (req, res) => {
             };
 
             // Clone in background - don't wait for it
-            cloneGitRepoAsSubmodule(repoUrl, null, onProgress)
+            const branchToUse = (docs_branch && String(docs_branch).trim()) || 'main';
+            cloneGitRepoAsSubmodule(repoUrl, null, onProgress, branchToUse)
                 .then(cloneResult => {
                     if (cloneResult.success) {
                         console.log(`✓ Course repository cloned to: courses/${cloneResult.folderName}`);
@@ -2708,7 +2709,9 @@ app.put('/api/courses/:courseId', authenticateToken, async (req, res) => {
             // If URL changed and is a valid git URL, clone the new repository
             if (newRepoUrl && newRepoUrl !== course.docs_repo_url && isGitUrl(newRepoUrl)) {
                 try {
-                    const cloneResult = await cloneGitRepoAsSubmodule(newRepoUrl, null);
+                    // Use the docs_branch from request, or fall back to existing course branch, or default to 'main'
+                    const branchToUse = (docs_branch && String(docs_branch).trim()) || course.docs_branch || 'main';
+                    const cloneResult = await cloneGitRepoAsSubmodule(newRepoUrl, null, null, branchToUse);
                     if (cloneResult.success) {
                         localRepoFolder = cloneResult.folderName;
                         const siteUrl = cloneResult.siteUrl;
