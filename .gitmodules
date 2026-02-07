@@ -15,3 +15,7 @@
 	path = courses/uno_watering_tutorial
 	url = git@github.com:fxprime/uno_watering_tutorial.git
 	branch = main
+[submodule "courses/esp32_loadcell_set_doc"]
+	path = courses/esp32_loadcell_set_doc
+	url = git@github.com:fxprime/esp32_loadcell_set_doc.git
+	branch = main
