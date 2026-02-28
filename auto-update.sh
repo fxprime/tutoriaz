@@ -5,17 +5,19 @@
 
 set -e
 
-# Configuration
-REPO_DIR="/home/thanabadeebulunseechart/learning/tutoriaz"  # UPDATE THIS
+# Configuration — paths derived from script location, no manual update needed
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$SCRIPT_DIR"
 BRANCH="main"
 SERVICE_NAME="tutoriaz"  # or use PM2 process name
 USE_PM2=false  # Set to true if using PM2, false for systemd
-LOG_FILE="/var/log/tutoriaz-autoupdate.log"
+LOG_FILE="$REPO_DIR/logs/autoupdate.log"
+
+# Ensure log directory exists
+mkdir -p "$(dirname "$LOG_FILE")"
 
 # Change to repo directory
 cd "$REPO_DIR"
-
-# Function to log messages
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
