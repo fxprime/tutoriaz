@@ -116,7 +116,7 @@ if [ ! -f "$VENV_DIR/bin/activate" ] && ! command -v mkdocs &>/dev/null; then
     if [ -n "$PYTHON_BIN" ]; then
         if "$PYTHON_BIN" -m venv "$VENV_DIR" 2>/dev/null; then
             log_info "Installing mkdocs into shared venv..."
-            "$VENV_DIR/bin/pip" install --quiet mkdocs mkdocs-material 2>/dev/null \
+            "$VENV_DIR/bin/pip" install --quiet "mkdocs>=1.5,<2" mkdocs-material 2>/dev/null \
                 && log_success "mkdocs installed successfully" \
                 || log_info "mkdocs install had warnings (may still work)"
         else
@@ -174,15 +174,23 @@ fi
 
 echo ""
 
-# Ensure database directory exists (DB_PATH may point to /var/lib/tutoriaz or similar)
+# Ensure database directory exists and is writable (DB_PATH may point to /var/lib/tutoriaz or similar)
 if [ -n "$DB_PATH" ]; then
     DB_DIR=$(dirname "$DB_PATH")
     if [ ! -d "$DB_DIR" ]; then
         log_info "Creating database directory: $DB_DIR"
-        mkdir -p "$DB_DIR" 2>/dev/null || sudo mkdir -p "$DB_DIR" && sudo chown "$(whoami)" "$DB_DIR"
+        mkdir -p "$DB_DIR" 2>/dev/null || (sudo mkdir -p "$DB_DIR" && sudo chown "$(whoami)" "$DB_DIR")
         if [ ! -d "$DB_DIR" ]; then
             log_info "Warning: Could not create $DB_DIR - server may fail to open database"
         fi
+    elif [ ! -w "$DB_DIR" ]; then
+        log_info "Database directory not writable, fixing ownership: $DB_DIR"
+        sudo chown "$(whoami)" "$DB_DIR" 2>/dev/null || log_info "Warning: Could not fix ownership of $DB_DIR"
+    fi
+    # Fix ownership of existing database file if not writable
+    if [ -f "$DB_PATH" ] && [ ! -w "$DB_PATH" ]; then
+        log_info "Database file not writable, fixing ownership: $DB_PATH"
+        sudo chown "$(whoami)" "$DB_PATH" 2>/dev/null || log_info "Warning: Could not fix ownership of $DB_PATH"
     fi
 fi
 
