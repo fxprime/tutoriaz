@@ -491,6 +491,19 @@ try {
     }
 }
 
+// Ensure the database directory exists
+const DB_DIR = path.dirname(DB_PATH);
+if (!fs.existsSync(DB_DIR)) {
+    try {
+        fs.mkdirSync(DB_DIR, { recursive: true });
+        console.log(`Created database directory: ${DB_DIR}`);
+    } catch (err) {
+        console.error(`Failed to create database directory ${DB_DIR}:`, err.message);
+        console.error('Try running: sudo mkdir -p ' + DB_DIR + ' && sudo chown $(whoami) ' + DB_DIR);
+        process.exit(1);
+    }
+}
+
 // Database connection
 const db = new sqlite3.Database(DB_PATH);
 

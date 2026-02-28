@@ -102,37 +102,66 @@ VENV_DIR="$COURSES_DIR/venv"
 log_info "Building course documentation..."
 COURSES_BUILT=0
 
+# Auto-create shared venv and install mkdocs if nothing is available
+if [ ! -f "$VENV_DIR/bin/activate" ] && ! command -v mkdocs &>/dev/null; then
+    log_info "No mkdocs found — creating shared virtual environment..."
+    PYTHON_BIN=""
+    for py in python3 python; do
+        if command -v "$py" &>/dev/null; then
+            PYTHON_BIN="$py"
+            break
+        fi
+    done
+
+    if [ -n "$PYTHON_BIN" ]; then
+        if "$PYTHON_BIN" -m venv "$VENV_DIR" 2>/dev/null; then
+            log_info "Installing mkdocs into shared venv..."
+            "$VENV_DIR/bin/pip" install --quiet mkdocs mkdocs-material 2>/dev/null \
+                && log_success "mkdocs installed successfully" \
+                || log_info "mkdocs install had warnings (may still work)"
+        else
+            log_info "Could not create virtual environment — skipping doc builds"
+        fi
+    else
+        log_info "Python not found — skipping doc builds"
+    fi
+fi
+
 # Check each course directory
 for course_dir in "$COURSES_DIR"/*; do
     if [ -d "$course_dir" ] && [ -f "$course_dir/mkdocs.yml" ]; then
         course_name=$(basename "$course_dir")
         log_info "Building docs for: $course_name"
         cd "$course_dir"
-        
-        # Check if course has its own venv
-        if [ -d "$course_dir/.venv" ]; then
+
+        # Determine which mkdocs to use (course venv > shared venv > system)
+        MKDOCS_CMD=""
+        NEEDS_DEACTIVATE=0
+
+        if [ -f "$course_dir/.venv/bin/activate" ]; then
             source "$course_dir/.venv/bin/activate"
-            if mkdocs build --quiet 2>/dev/null; then
-                log_success "Built documentation for $course_name"
-                COURSES_BUILT=$((COURSES_BUILT + 1))
-            else
-                log_info "Could not build $course_name (continuing anyway)"
-            fi
-            deactivate
-        # Otherwise use shared venv if it exists
-        elif [ -d "$VENV_DIR" ]; then
+            MKDOCS_CMD="mkdocs"
+            NEEDS_DEACTIVATE=1
+        elif [ -f "$VENV_DIR/bin/activate" ]; then
             source "$VENV_DIR/bin/activate"
-            if mkdocs build --quiet 2>/dev/null; then
+            MKDOCS_CMD="mkdocs"
+            NEEDS_DEACTIVATE=1
+        elif command -v mkdocs &>/dev/null; then
+            MKDOCS_CMD="mkdocs"
+        fi
+
+        if [ -n "$MKDOCS_CMD" ]; then
+            if $MKDOCS_CMD build --quiet 2>/dev/null; then
                 log_success "Built documentation for $course_name"
                 COURSES_BUILT=$((COURSES_BUILT + 1))
             else
                 log_info "Could not build $course_name (continuing anyway)"
             fi
-            deactivate
         else
-            log_info "No virtual environment found for $course_name"
+            log_info "No mkdocs available for $course_name — skipping"
         fi
-        
+
+        [ $NEEDS_DEACTIVATE -eq 1 ] && deactivate
         cd "$SCRIPT_DIR"
     fi
 done
@@ -144,6 +173,19 @@ else
 fi
 
 echo ""
+
+# Ensure database directory exists (DB_PATH may point to /var/lib/tutoriaz or similar)
+if [ -n "$DB_PATH" ]; then
+    DB_DIR=$(dirname "$DB_PATH")
+    if [ ! -d "$DB_DIR" ]; then
+        log_info "Creating database directory: $DB_DIR"
+        mkdir -p "$DB_DIR" 2>/dev/null || sudo mkdir -p "$DB_DIR" && sudo chown "$(whoami)" "$DB_DIR"
+        if [ ! -d "$DB_DIR" ]; then
+            log_info "Warning: Could not create $DB_DIR - server may fail to open database"
+        fi
+    fi
+fi
+
 log_success "Starting server..."
 echo "======================================"
 echo ""
