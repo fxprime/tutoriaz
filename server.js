@@ -15,6 +15,9 @@ const path = require('path');
 const multer = require('multer');
 const sharp = require('sharp');
 const { execSync, spawn } = require('child_process');
+const session = require('express-session');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 // Custom XSS filter options for markdown content with code blocks
 const xssOptionsForMarkdown = new xss.FilterXSS({
@@ -457,9 +460,17 @@ const PORT = process.env.PORT || 3030;
 // Use 127.0.0.1 only in development for security
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const SESSION_SECRET = process.env.SESSION_SECRET || JWT_SECRET;
 const BASE_URL = process.env.BASE_URL || `http://${HOST}:${PORT}`;
 // Use DB_PATH environment variable if set, otherwise default to local database.sqlite
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'database.sqlite');
+// Google OAuth credentials (set in .env or environment)
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_OAUTH_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+if (!GOOGLE_OAUTH_ENABLED) {
+    console.warn('[OAuth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google login disabled.');
+}
 
 // Application version and build info
 let APP_VERSION = '0.0.0';
@@ -543,6 +554,27 @@ function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_course_enrollments_student
             ON course_enrollments(student_id)
         `);
+
+        // Ensure users table has google_id and avatar_url columns (Google OAuth)
+        db.all('PRAGMA table_info(users)', [], (err, rows) => {
+            if (err) { console.error('PRAGMA table_info(users) error:', err); return; }
+            const cols = Array.isArray(rows) ? rows.map(r => r.name) : [];
+            if (!cols.includes('google_id')) {
+                db.run('ALTER TABLE users ADD COLUMN google_id TEXT', (e) => {
+                    if (e) console.error('Error adding google_id column:', e);
+                    else {
+                        db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users (google_id) WHERE google_id IS NOT NULL');
+                        console.log('Added google_id column to users table');
+                    }
+                });
+            }
+            if (!cols.includes('avatar_url')) {
+                db.run('ALTER TABLE users ADD COLUMN avatar_url TEXT', (e) => {
+                    if (e) console.error('Error adding avatar_url column:', e);
+                    else console.log('Added avatar_url column to users table');
+                });
+            }
+        });
 
         // Ensure legacy tables get access_code_hash column
         db.all('PRAGMA table_info(courses)', [], (err, rows) => {
@@ -755,6 +787,125 @@ app.use(cors());
 app.use(express.json({ limit: '200kb' }));
 app.use(express.urlencoded({ extended: false, limit: '200kb' }));
 app.use(express.static('public'));
+
+// ── Session (required for Passport OAuth redirect flow) ──────────────────────
+app.use(session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, maxAge: 5 * 60 * 1000 } // 5 min – only used during OAuth redirect
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Minimal passport serialization (we only use sessions for the OAuth handshake)
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((user, done) => done(null, user));
+
+// ── Google OAuth Strategy ─────────────────────────────────────────────────────
+if (GOOGLE_OAUTH_ENABLED) {
+    passport.use(new GoogleStrategy({
+        clientID: GOOGLE_CLIENT_ID,
+        clientSecret: GOOGLE_CLIENT_SECRET,
+        callbackURL: `${BASE_URL}/auth/google/callback`,
+        scope: ['profile', 'email']
+    }, async (accessToken, refreshToken, profile, done) => {
+        try {
+            const googleId = profile.id;
+            const email = (profile.emails && profile.emails[0]) ? profile.emails[0].value : null;
+            const displayName = profile.displayName || email || googleId;
+            const avatarUrl = (profile.photos && profile.photos[0]) ? profile.photos[0].value : null;
+
+            // 1. Try to find existing user by google_id
+            let user = await new Promise((res, rej) => {
+                db.get('SELECT * FROM users WHERE google_id = ?', [googleId], (err, row) => err ? rej(err) : res(row));
+            });
+
+            if (!user && email) {
+                // 2. Try to link to existing account with same email/username
+                user = await new Promise((res, rej) => {
+                    db.get('SELECT * FROM users WHERE username = ?', [email.toLowerCase().split('@')[0]], (err, row) => err ? rej(err) : res(row));
+                });
+                if (user) {
+                    // Link google_id to existing account
+                    await new Promise((res, rej) => {
+                        db.run('UPDATE users SET google_id = ?, avatar_url = ? WHERE id = ?', [googleId, avatarUrl, user.id], (err) => err ? rej(err) : res());
+                    });
+                    user.google_id = googleId;
+                }
+            }
+
+            if (!user) {
+                // 3. Create a new student account
+                const newId = uuidv4();
+                // Derive a safe username from email or Google profile
+                let baseUsername = email ? email.toLowerCase().split('@')[0].replace(/[^a-z0-9_]/g, '_') : `guser_${newId.slice(0, 6)}`;
+                if (/^[0-9_]/.test(baseUsername)) baseUsername = 'g' + baseUsername;
+                baseUsername = baseUsername.slice(0, 25);
+
+                // Ensure uniqueness
+                let username = baseUsername;
+                let suffix = 1;
+                while (true) {
+                    const exists = await new Promise((res, rej) => {
+                        db.get('SELECT id FROM users WHERE username = ?', [username], (err, row) => err ? rej(err) : res(row));
+                    });
+                    if (!exists) break;
+                    username = `${baseUsername}${suffix++}`;
+                }
+
+                // Use a random unusable password hash for Google-only accounts
+                const randomPasswordHash = await bcrypt.hash(uuidv4(), 10);
+
+                await new Promise((res, rej) => {
+                    db.run(
+                        'INSERT INTO users (id, username, display_name, password_hash, role, google_id, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [newId, username, displayName, randomPasswordHash, 'student', googleId, avatarUrl],
+                        (err) => err ? rej(err) : res()
+                    );
+                });
+
+                user = { id: newId, username, display_name: displayName, role: 'student', google_id: googleId, avatar_url: avatarUrl };
+            }
+
+            done(null, user);
+        } catch (err) {
+            done(err);
+        }
+    }));
+}
+
+// ── Google OAuth Routes ──────────────────────────────────────────────────────
+app.get('/auth/google', (req, res, next) => {
+    if (!GOOGLE_OAUTH_ENABLED) return res.status(503).json({ error: 'Google login is not configured on this server.' });
+    passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
+
+app.get('/auth/google/callback',
+    (req, res, next) => {
+        if (!GOOGLE_OAUTH_ENABLED) return res.redirect('/?error=oauth_disabled');
+        next();
+    },
+    passport.authenticate('google', { failureRedirect: '/?error=google_auth_failed', session: false }),
+    (req, res) => {
+        // Issue JWT and redirect to frontend
+        const user = req.user;
+        const tokenPayload = {
+            userId: user.id,
+            username: user.username,
+            display_name: user.display_name,
+            role: user.role
+        };
+        const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '24h' });
+        // Redirect to index with token in query — login.js will pick it up
+        res.redirect(`/?google_token=${encodeURIComponent(token)}`);
+    }
+);
+
+// ── Config endpoint: expose whether Google OAuth is available ─────────────────
+app.get('/api/auth/providers', (req, res) => {
+    res.json({ googleOAuth: GOOGLE_OAUTH_ENABLED });
+});
 
 // Rate limiter for auth endpoints (login / register)
 // Disabled - bypass rate limiting

@@ -87,10 +87,66 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
+// ── Google OAuth button setup ──────────────────────────────────────────────
+async function initGoogleButton() {
+    const btn = document.getElementById('googleLoginBtn');
+    if (!btn) return;
+    try {
+        const res = await fetch(`${API_BASE}/auth/providers`);
+        if (res.ok) {
+            const { googleOAuth } = await res.json();
+            if (googleOAuth) {
+                btn.classList.remove('hidden');
+                btn.addEventListener('click', () => {
+                    window.location.href = '/auth/google';
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('Could not check OAuth providers:', e);
+    }
+}
+
 window.addEventListener('load', () => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
     const params = new URLSearchParams(window.location.search);
+
+    // ── Handle Google OAuth callback token ────────────────────────────────
+    const googleToken = params.get('google_token');
+    if (googleToken) {
+        try {
+            // Decode payload (JWT is not encrypted – safe to read client-side)
+            const payload = JSON.parse(atob(googleToken.split('.')[1]));
+            localStorage.setItem('token', googleToken);
+            localStorage.setItem('user', JSON.stringify({
+                id: payload.userId,
+                username: payload.username,
+                display_name: payload.display_name,
+                role: payload.role
+            }));
+            // Clean URL then redirect
+            history.replaceState({}, '', '/');
+            window.location.href = payload.role === 'teacher' ? '/teacher.html' : '/student.html';
+            return;
+        } catch (e) {
+            console.error('Failed to parse Google token:', e);
+        }
+    }
+
+    // ── Handle OAuth error ────────────────────────────────────────────────
+    const oauthError = params.get('error');
+    if (oauthError) {
+        showLoginPanel();
+        const messageDiv = document.getElementById('loginMessage');
+        if (messageDiv) {
+            const msg = oauthError === 'google_auth_failed'
+                ? 'Google sign-in failed. Please try again or use username/password.'
+                : 'Authentication error. Please try again.';
+            messageDiv.innerHTML = `<div class="error">${msg}</div>`;
+        }
+        history.replaceState({}, '', '/');
+    }
 
     if (params.get('login') === '1') {
         showLoginPanel();
@@ -110,6 +166,8 @@ window.addEventListener('load', () => {
             localStorage.removeItem('user');
         }
     }
+
+    initGoogleButton();
 });
 
 // Initialize app config
