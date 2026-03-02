@@ -89,17 +89,27 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
 // ── Google OAuth button setup ──────────────────────────────────────────────
 async function initGoogleButton() {
-    const btn = document.getElementById('googleLoginBtn');
-    if (!btn) return;
     try {
         const res = await fetch(`${API_BASE}/auth/providers`);
         if (res.ok) {
             const { googleOAuth } = await res.json();
             if (googleOAuth) {
-                btn.classList.remove('hidden');
-                btn.addEventListener('click', () => {
-                    window.location.href = '/auth/google';
-                });
+                // Sign-in button (login panel)
+                const loginBtn = document.getElementById('googleLoginBtn');
+                if (loginBtn) {
+                    loginBtn.classList.remove('hidden');
+                    loginBtn.addEventListener('click', () => {
+                        window.location.href = '/auth/google';
+                    });
+                }
+                // Sign-up button ("New here?" card)
+                const signupBtn = document.getElementById('googleSignupBtn');
+                if (signupBtn) {
+                    signupBtn.classList.remove('hidden');
+                    signupBtn.addEventListener('click', () => {
+                        window.location.href = '/auth/google';
+                    });
+                }
             }
         }
     } catch (e) {
