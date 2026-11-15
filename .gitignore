@@ -1,5 +1,6 @@
 node_modules/
 database.sqlite
+database.sqlite.backup.*
 .env
 .DS_Store
 dist/
