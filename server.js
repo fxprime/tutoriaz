@@ -5204,14 +5204,19 @@ app.get('/api/pushes/:pushId/responses', authenticateToken, async (req, res) => 
     }
 });
 
-// Get all active quizzes with student progress for multi-quiz monitor (teacher only)
+// Get active quizzes with student progress for multi-quiz monitor (teacher only)
 app.get('/api/monitor/all-active-quizzes', authenticateToken, async (req, res) => {
     try {
         if (req.user.role !== 'teacher') {
             return res.status(403).json({ error: 'Teacher access required' });
         }
 
-        // Get all active pushes from student_quiz_queue
+        const { courseId } = req.query;
+        if (courseId !== undefined && (typeof courseId !== 'string' || !courseId.trim())) {
+            return res.status(400).json({ error: 'Invalid course ID' });
+        }
+
+        // Older pushes can inherit their course from the quiz.
         const activePushesQuery = `
             SELECT DISTINCT 
                 sqq.push_id,
@@ -5219,7 +5224,7 @@ app.get('/api/monitor/all-active-quizzes', authenticateToken, async (req, res) =
                 qp.pushed_at,
                 qp.pushed_by,
                 qp.timeout_seconds,
-                qp.course_id,
+                COALESCE(qp.course_id, q.course_id) AS course_id,
                 q.title as quiz_title,
                 q.correct_answer,
                 q.question_type,
@@ -5229,12 +5234,13 @@ app.get('/api/monitor/all-active-quizzes', authenticateToken, async (req, res) =
             JOIN quizzes q ON sqq.quiz_id = q.id
             WHERE sqq.status IN ('pending', 'viewing', 'answered')
                 AND (qp.undone_at IS NULL OR qp.undone_at = '')
+                ${courseId ? 'AND COALESCE(qp.course_id, q.course_id) = ?' : ''}
             GROUP BY sqq.push_id
             ORDER BY qp.pushed_at DESC
         `;
 
         const pushes = await new Promise((resolve, reject) => {
-            db.all(activePushesQuery, [], (err, rows) => {
+            db.all(activePushesQuery, courseId ? [courseId.trim()] : [], (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows || []);
             });

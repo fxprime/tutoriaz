@@ -3218,7 +3218,7 @@ function updateQueueStatus(data) {
         });
 }
 
-// Open multi-quiz monitor window (shows all active quizzes)
+// Open the multi-quiz monitor for the selected course
 function openMultiQuizMonitor() {
     if (!selectedCourseId) {
         showNotification('Please select a course first', 'error');

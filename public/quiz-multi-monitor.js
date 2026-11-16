@@ -1,6 +1,6 @@
 const urlParams = new URLSearchParams(window.location.search);
 const token = urlParams.get('token');
-const courseId = urlParams.get('courseId'); // Get the course ID from URL
+const courseId = urlParams.get('courseId')?.trim();
 
 let socket;
 let quizData = {}; // Map of pushId -> quiz data
@@ -44,12 +44,14 @@ function connectSocket() {
 
     // Listen for real-time quiz responses
     socket.on('quiz_response', (data) => {
+        if (data.course_id && data.course_id !== courseId) return;
         console.log('Quiz response received:', data);
         handleQuizResponse(data);
     });
 
     // Listen for quiz pushes (new quizzes)
     socket.on('push_created', (data) => {
+        if (data.course_id && data.course_id !== courseId) return;
         console.log('New quiz pushed:', data);
         // Refresh to include the new quiz
         fetchAllActiveQuizzes();
@@ -76,8 +78,11 @@ function updateConnectionStatus(connected) {
 }
 
 async function fetchAllActiveQuizzes() {
+    if (!token || !courseId) return;
+
     try {
-        const response = await fetch('/api/monitor/all-active-quizzes', {
+        const params = new URLSearchParams({ courseId });
+        const response = await fetch(`/api/monitor/all-active-quizzes?${params}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -186,6 +191,11 @@ function updateLastUpdateTime() {
 
 function renderMonitor() {
     const monitorGrid = document.getElementById('monitorGrid');
+    if (!token || !courseId) {
+        monitorGrid.textContent = token ? 'No course selected' : 'Authentication required';
+        return;
+    }
+
     const quizzes = Object.values(quizData);
     
     if (quizzes.length === 0) {
@@ -601,9 +611,8 @@ setInterval(() => {
 }, 30000);
 
 // Initialize
-if (token) {
+if (token && courseId) {
     connectSocket();
 } else {
-    console.error('No token provided');
-    document.querySelector('.no-quizzes').textContent = 'Authentication required';
+    renderMonitor();
 }
